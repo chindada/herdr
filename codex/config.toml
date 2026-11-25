@@ -1,0 +1,26 @@
+[mcp_servers.gitlab]
+command = "npx"
+args = ["-y", "@zereight/mcp-gitlab"]
+env_vars = ["GITLAB_PERSONAL_ACCESS_TOKEN"]
+
+[mcp_servers.gitlab.env]
+GITLAB_API_URL = "https://gitlab.com/api/v4"
+
+[mcp_servers.mcp-atlassian]
+command = "uvx"
+args = ["mcp-atlassian"]
+env_vars = ["JIRA_PERSONAL_TOKEN", "CONFLUENCE_PERSONAL_TOKEN"]
+
+[mcp_servers.mcp-atlassian.env]
+JIRA_URL = "https://jira-dc.moxa.com"
+CONFLUENCE_URL = "https://wiki.moxa.com"
+
+[mcp_servers.android]
+command = "uvx"
+args = ["android-mcp"]
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+env_vars = ["CONTEXT7_API_KEY"]
+startup_timeout_ms = 20_000
