@@ -27,7 +27,15 @@ scripts/check-env.zsh codex
 ```
 
 Launch the agent from the same pane. Codex needs `--no-daemon` in Herdr.
-Without it, its commands run outside the terminal that `hc` manages.
+Without it, its commands run outside the terminal that `hc` manages. For
+the team launch mode the user authorizes, start the lead with `--yolo`.
+
+```zsh
+codex --yolo --no-daemon
+```
+
+For an approval-based launch, omit `--yolo` to keep the configured sandbox
+and approval policy.
 
 ```zsh
 codex --no-daemon
@@ -65,8 +73,12 @@ give the full path of the executable and its configuration directory.
 
 ```zsh
 hc run --bg --name project-lead --cwd "$PWD" -- \
-  /bin/zsh -lic 'codex --no-daemon'
+  /bin/zsh -lic 'codex --yolo --no-daemon'
 ```
+
+Use this team launch mode when the user authorizes its flags. Otherwise use
+the approval-based alternative, which keeps the configured permission mode.
+Keep the running lead when provisioning members from its starter prompt.
 
 Keep credential values in the environment only. Never put them in command
 arguments, `hc send` text, labels, files, or reports. Refer to a credential by
@@ -96,14 +108,21 @@ decides who is on the team and what each member may do.
 
 ### Record the facts
 
-Confirm the lead's address from `HC_TERMINAL_ID` and look up its team name.
-Check that the name resolves to that address. This example uses
-`project-lead`. Use the same form for authorized members. Read app status
-and layout when setting up or changing the team's layout.
+Read the lead's actual address from `HC_TERMINAL_ID`. If an approval rule
+allows a literal lead alias, such as `project-lead`, query
+`hc get -- project-lead` first. Verify that its returned `address` matches
+`HC_TERMINAL_ID` and keep that address as `lead`. When address-based
+lookup is allowed, query by address as shown below. Capture
+`foreground.cwd` before changing directories and check it against `pwd -P`.
+Resolve the selected space with app status and layout and check that the lead
+belongs to it. If the selected space and the lead's space differ, resolve
+which one the user intends before launching there. Keep the resolved space
+and directory for this setup even when focus changes.
 
 ```zsh
-printf '%s\n' "$HC_TERMINAL_ID"
-hc get -- project-lead
+lead="$HC_TERMINAL_ID"
+hc get -- "$lead"
+pwd -P
 ```
 
 ```zsh
@@ -114,7 +133,8 @@ herdr-app ls
 Record these values:
 
 - From `hc get`: the lead's `address`, its `foreground.cwd`, its `parent`, and
-  its `herdr.space` label.
+  its `herdr.space` label. Verify any existing launch alias against the
+  actual address before using it.
 - From `herdr-app status`: the `space`, `tab`, and `focused_pane` the window
   shows now. The shown space can differ from the lead's own space.
 - From `herdr-app ls`: each space's `id` and `name`, and the `terminal`
@@ -122,13 +142,17 @@ Record these values:
 
 ### Agree on the roster
 
-Reuse the members the person has already authorized. Record each member's
-assigned address, team name, and role. Use the address to identify the
-member in READY replies, reports, and pane titles. A role is an assignment,
-so the same terminal can take a different role later.
+The requested roster authorizes its listed roles and commands. Either CLI
+can be a coder or reviewer. The roster and per-turn assignment determine
+the role.
 
-Start a new member only when the person's roster and scope call for one. Do
-not stop, move, rename, or send input to terminals outside that roster.
+Inspect `hc ls` and verify candidates with `hc get`. Reuse an authorized
+live member whose role, running CLI conversation, parent, current directory,
+and space match. Record its actual address and any existing launch alias.
+Create only missing authorized members. If a roster member has a permission
+or launch-mode mismatch, report it, preserve the session, and leave the
+entry pending. Resolve ambiguous matches before retrying. Leave unrelated
+terminals alone.
 
 ### Prepare team communication
 
@@ -139,13 +163,12 @@ Use the onboarding READY message to verify the member's return path.
 When a role needs permission for the local Herdr connection, configure
 it during setup.
 
-Choose a distinct Herdr name for each terminal, including a new lead,
-before setting up its launch permissions. Use team-specific names and keep
-them reserved for that team. Pass the same names to `hc run --name` so the
-rules can be in place before Herdr assigns terminal addresses. For an
-existing pane without a name, read `HC_TERMINAL_ID` in its shell before
-launching the agent. Substitute that literal address for its name in the
-rules, commands, and onboarding prompt.
+Use actual terminal addresses in the roster, titles, and READY reports.
+An immutable `hc run --name` launch alias can still be used in an
+approval-based setup to prepare narrow rules before an address is assigned.
+Reserve such aliases for the team and preserve them on reuse. Use a verified
+literal address or alias supported by the current rule. A native title
+change leaves the launch alias and its rules in place.
 
 - [Codex team communication](codex/README.md#herdr-team-communication)
 - [Claude Code team communication](claude/README.md#herdr-team-communication)
@@ -158,31 +181,69 @@ and the verdict in its pane for the lead to read.
 
 ### Add a member
 
-Start each new member as an interactive agent in the background, using
-its chosen name, an explicit working directory, and the lead as its parent.
-`hc run` prints the address of the new terminal. Record it with the
-member's name and role. Use the verified literal name for `hc` commands
-and set `member` to the assigned address for the layout commands below.
+Use `hc run --bg` for every new interactive member. Bind `project_dir`
+and `space_id` to the resolved directory and space ID. Use the verified
+`lead` address and prepare an `onboarding_prompt` for that member's role
+using [Onboard a member](#onboard-a-member). Pass it as the first
+positional prompt. The same launch works for either role.
 
-For a Codex reviewer, prepare the
-[review profile](codex/README.md#review-profile) with workspace write
-access before launch.
-
-```zsh
-hc run --bg --name project-review --cwd /path/to/repo \
-  --parent "$HC_TERMINAL_ID" -- \
-  /bin/zsh -lic 'codex --no-daemon --profile review'
-```
-
-For a Claude coder, choose the prepared alias and
-[worker settings](claude/README.md#roles-and-preferences). This example
-uses `claude` with Auto mode.
+These visible-team examples opt into the space with `herdr.space`.
+A `herdr.tab` label selects a tab. Without it, Herdr can create a
+temporary tab in the space.
+For a requested shared layout, use [Show the team](#show-the-team) to
+move the same authorized terminals into the lead's tab.
 
 ```zsh
-hc run --bg --name project-coder --cwd /path/to/repo \
-  --parent "$HC_TERMINAL_ID" -- \
-  /bin/zsh -lic 'claude --permission-mode auto --settings "$HOME/.claude/herdr-worker.json"'
+hc run --bg --cwd "$project_dir" --parent "$lead" \
+  --label "herdr.space=$space_id" -- \
+  codex --yolo --no-daemon -- "$onboarding_prompt"
 ```
+
+```zsh
+hc run --bg --cwd "$project_dir" --parent "$lead" \
+  --label "herdr.space=$space_id" -- \
+  env CLAUDE_CONFIG_DIR="$HOME/.claude" "$HOME/.local/bin/claude" \
+  --dangerously-skip-permissions -- "$onboarding_prompt"
+```
+
+Use a verified executable path if the core's PATH differs. Set
+`CLAUDE_CONFIG_DIR` to the selected profile, such as `$HOME/.claude-k`.
+Without it, Claude Code reads a different configuration than the profile
+aliases. Alternatively, launch a Claude alias through a verified login
+shell. When wrapping a launch in zsh, pass the onboarding text as a
+positional argument to the shell.
+
+```zsh
+hc run --bg --cwd "$project_dir" --parent "$lead" \
+  --label "herdr.space=$space_id" -- \
+  /bin/zsh -lic 'exec codex --yolo --no-daemon -- "$1"' \
+  herdr-member "$onboarding_prompt"
+```
+
+For an authorized background-only launch, omit the
+`--label "herdr.space=$space_id"` argument and leave `herdr.tab` unset.
+Keep `--parent "$lead"` and use the verified live parent's space for the
+hidden member.
+
+Use the launch flags the user authorized. Keep any selected Codex
+`--profile` or Claude configuration directory and settings file. For
+approval-based launches, see the [Codex review profile](codex/README.md#review-profile)
+and [Claude role settings and Auto mode](claude/README.md#roles-and-preferences).
+Those permission settings apply to their own mode. A launch that bypasses
+approvals still follows the assigned scope. If managed policy, tool
+permissions, or a startup decision blocks the requested launch, report it.
+
+Claude Code can ask once per configuration directory to acknowledge
+`--dangerously-skip-permissions`. When `hc read --lines 0` shows that
+native dialog, tell the user which member shows it and leave the answer
+to them. Do not send keys to the dialog. After the user clears it, check
+that the member received its onboarding before resending.
+
+Record the returned terminal address, then verify live state,
+`foreground.argv`, `foreground.cwd`, parent, and space with `hc get`.
+Check the member's space label for a visible launch. Set `member` to the
+verified address for layout commands. After an ambiguous launch failure,
+inspect existing terminals before retrying.
 
 For a member that needs MCP credentials, start a shell instead. Give it a
 pane as described in [Show the team](#show-the-team), so a person can enter
@@ -192,37 +253,36 @@ the credentials, run the environment check, and launch the agent there.
 hc run --bg --name project-mcp --cwd /path/to/repo --parent "$HC_TERMINAL_ID"
 ```
 
-A member ends when its parent ends unless you add `--outlive-parent`. To place
-a member in another space or tab at launch, add `--label herdr.space=<id>`
-and `--label herdr.tab=<id>` with IDs from `herdr-app ls`.
+A member ends when its parent ends unless you add `--outlive-parent`.
 
-Before sending onboarding, verify the intended CLI, its working directory,
-and an available input prompt. A wait can return for a message or a timeout
-while the member is still starting. Check the result and inspect the pane.
-These examples use `project-review` for the member and `project-lead`
-for the lead. Use the team's verified names.
+For a prepared shell or launch without the first prompt, wait for the
+intended CLI to start. Verify its working directory and inspect the pane
+for an idle, empty composer before sending onboarding. Check delivery
+before resending after a timeout. Use a verified alias if the lead's
+rules require one.
 
 ```zsh
-hc wait --timeout 45 -- project-review
-hc get -- project-review
-hc read --lines 0 -- project-review
+hc wait --timeout 45 -- "$member"
+hc get -- "$member"
+hc read --lines 0 -- "$member"
 ```
 
-When the member can receive input, send the onboarding request. Replace
-the example addresses, parent, and directory with the values from `hc get`.
-Check the READY reply before assigning work.
-
 ```zsh
-hc send -- project-review \
-  'Onboard as reviewer. Lead project-lead (t6), member t7,
-  parent t6, cwd /path/to/repo. Follow Onboard a member in HERDR.md.
-  Print READY in your pane.'
+hc send -- "$member" "$onboarding_prompt"
 ```
 
 ### Show the team
 
 These commands change what the person sees. Run them only for a layout the
 person asked for, and leave other tabs, panes, and running programs alone.
+
+When Pixel HQ visibility is requested, verify each member's space label and
+pin each member as soon as its launch is verified. Recheck the pin on reused
+members and after placing each terminal.
+
+```zsh
+herdr-app do terminal.pin --terminal "$member" --pinned true
+```
 
 A member gets its own pane in the lead's tab. Find the target pane of that
 tab in `herdr-app ls` and set `target_pane` to its ID. Focus that pane
@@ -233,18 +293,14 @@ pane.
 herdr-app do pane.focus --pane "$target_pane"
 herdr-app do terminal.keep --terminal "$member" --place right
 herdr-app ls
-hc get -- project-review
+hc get -- "$member"
 ```
 
 `terminal.keep` splits `right` or `down`. It can answer `pending: true` and
 apply the change a moment later. Before you continue, confirm in
 `herdr-app ls` that the member has its new pane in the lead's tab, and check
-its space there and in `hc get`. A member started without labels has no space
-until it is shown. Then pin it to the top of the agent lists.
-
-```zsh
-herdr-app do terminal.pin --terminal "$member" --pinned true
-```
+its space there and in `hc get`. A member started without labels can gain
+a space when it is shown.
 
 A member that already has a pane somewhere else must give it up first.
 Parking removes the pane, turns off core keep, and leaves the program
@@ -253,7 +309,7 @@ running. It can also answer `pending: true`.
 ```zsh
 herdr-app do terminal.park --terminal "$member"
 herdr-app ls
-hc get -- project-review
+hc get -- "$member"
 ```
 
 After parking, confirm in `herdr-app ls` that the old pane no longer shows
@@ -261,53 +317,68 @@ the member, and in `hc get` that the member is still `live` with the same
 `parent` and foreground program. Only then focus the target pane and run
 `terminal.keep`.
 
-Titles are optional. Name the shared tab after the space, and name each
-member's pane with its address. Take `team_tab`, `space_name`, and
-`member_pane` from `herdr-app ls`.
+For Pixel HQ, name the shared tab after the space and set each agent's
+native conversation title to its verified terminal address. Take
+`team_tab` and `space_name` from `herdr-app ls`.
 
 ```zsh
 herdr-app do tab.rename --id "$team_tab" --name "$space_name-lead"
-herdr-app do pane.rename --pane "$member_pane" --name "$member"
 ```
 
-Check the result before you report it. Compare the `terminal` and `pane`
-pairs in `herdr-app ls` with the roster, then save a screenshot and look at
-it.
+In Codex, have each session call its own native title tool when available.
+For `mcp__codex_tui__set_thread_title`, supply the address as `title` and
+omit `threadId`. For Claude Code, use its native `/rename <address>`
+command. If delivering it with `hc keys`, verify the address, foreground
+CLI, parent, and cwd with `hc get`. Inspect `hc read --lines 0` for an
+idle or completed turn with an empty composer and no dialog or queued
+input. Send the literal command keys and one Enter only at that safe
+boundary. Verify the native title and report any title change the
+running CLI cannot support.
+
+Check `herdr-app status` for layout errors and compare the roster against
+the terminal and pane pairs in `herdr-app ls`. For requested Pixel HQ
+visibility, choose a unique `team_shot` path outside the checkout. Take
+and open a fresh screenshot. Confirm that the lead and every member have
+a recognizable name and icon independently visible in the team panel,
+and that all split panes are visible together in the shared tab. Report
+any visibility blocker with the affected terminals.
 
 ```zsh
+herdr-app status
 herdr-app ls
-herdr-app shot /tmp/herdr-team.png
+herdr-app shot "$team_shot"
 ```
 
 ### Onboard a member
 
-Send this prompt to each member. The lead supplies the verified addresses,
-the lead's team name, parent, working directory, and role. Include the
-reporting path agreed in
+Use this prompt for each member. Supply the verified lead address and
+directory, expected space, assigned role, and the reporting path agreed in
 [Prepare team communication](#prepare-team-communication).
 
 ```text
 You are joining a Herdr team in this repository.
-Lead: <lead-name> (<lead-address>). Member: <member-address>. Role: <role>.
-Parent: <parent>. Working directory: <foreground.cwd>.
+Lead and expected parent: <lead-address>. Role: <role>.
+Expected working directory: <project-dir>. Expected space: <name and ID>.
 
-This step is setup only. Do not edit files, start agents, or change the
-Herdr layout.
+This step is setup only. Leave the checkout and layout as they are.
 
-1. Read CLAUDE.md, which imports AGENTS.md, and HERDR.md in this
-   repository.
-2. Confirm the working directory and instructions you can access.
-3. Reply with READY, your member address, parent, working directory,
-   and role. Use hc send -- <lead-name> "<reply>" when authorized,
+1. Read CLAUDE.md, AGENTS.md, and HERDR.md in this repository.
+2. Confirm your actual HC_TERMINAL_ID, working directory, and role.
+3. Reply with READY, your actual member address, expected parent and space,
+   working directory, role, and rules read. Use hc send -- <lead-address>
+   "<reply>" when authorized, using the verified alias if required,
    or print the reply in your pane for the lead to read.
 
-Wait for an assignment from the lead. A review assignment specifies
+Stay interactive and wait for an assignment from the lead.
+Launch authority belongs to the lead. A review assignment specifies
 whether you are the editor for that turn. Bring questions and blockers
 to the lead. The designated lead handles authorized commits.
 ```
 
-A member is ready when the lead has its reply and has checked its actual
-terminal, working directory, and role.
+A member is ready when the lead has its READY reply and has verified the
+live address, foreground CLI and working directory, parent, space, and
+assigned role. A setup-only request ends with a readiness and visibility
+report. Keep the team available for later assignments.
 
 ### Review and repair
 
@@ -504,17 +575,37 @@ Chinese (Taiwan).
 
 ## Starter prompt
 
-Paste this into the agent that will lead.
+Paste this into the running lead. Edit the roster to authorize only the roles
+and launch commands you want. Use it on its own for setup, or append a task
+to start after READY.
 
 ```text
 Act as the lead for this Herdr space. Read HERDR.md in the current
 checkout, or use the GitHub copy if the local file is unavailable:
 https://github.com/chindada/herdr/blob/main/HERDR.md
 
-Verify the current space and reuse the task, roster, and scope I have
-already authorized. Have the reviewer fix issues within scope, the coder
-re-review the fixes, and the reviewer check the result again. Repeat until
-the candidate is clear of actionable issues and passes verification.
-For authorized commits, follow Commit reviewed changes in HERDR.md.
-Ask only for a consequential missing decision or a necessary approval.
+Read the installed hc and herdr-app manuals. Use this terminal as the lead.
+Resolve the current working directory, lead address, and selected Herdr
+space from live state.
+
+Authorized roster and launch commands:
+- Codex coder: codex --yolo --no-daemon
+- Codex reviewer: codex --yolo --no-daemon
+- Claude coder: claude --dangerously-skip-permissions
+- Claude reviewer: claude --dangerously-skip-permissions
+
+Reuse matching live authorized members and launch only missing members as
+interactive children. Record actual terminal addresses and verified CLI,
+working directory, parent, and space. Report permission or launch-mode
+mismatches and preserve existing sessions.
+
+Onboard each member and verify READY. Pin the members and show the team
+in one shared tab with distinct split panes. Set native titles to actual
+addresses and verify independent Pixel HQ visibility with a screenshot.
+Report the roster, readiness, and any blockers.
+
+If I supply a task, start it once its assigned members are READY and
+follow Review and repair and Commit reviewed changes in HERDR.md.
+Otherwise this is setup only. Keep everyone interactive and on standby
+for an assignment.
 ```

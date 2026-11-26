@@ -134,6 +134,10 @@ check_claude_config() {
   ' "${claude_mcp_file}" 2>/dev/null); then
     ok 'Checked the Claude Code user-level MCP configuration'
     check_mcp_environment "${claude_variables}"
+    if jq -e 'any(.mcpServers[]?; .command? == "github-mcp-server")' \
+        "${claude_mcp_file}" >/dev/null 2>&1; then
+      claude_github_mcp=1
+    fi
   else
     fail "Could not parse JSON or MCP settings in ${claude_mcp_file}"
   fi
@@ -147,6 +151,11 @@ if [ -n "${HC_TERMINAL_ID:-}" ]; then
     ok "Context checkpoint helper is installed at ${context_helper}"
   else
     fail "Install the context checkpoint helper as an executable at ${context_helper}"
+  fi
+  if command -v herdr-context >/dev/null; then
+    ok 'herdr-context is on PATH'
+  else
+    fail 'herdr-context is missing from PATH. Add ~/.local/bin to PATH.'
   fi
 else
   note 'HC_TERMINAL_ID is missing. Run this check from the Herdr terminal where you launch the tool.'
@@ -192,9 +201,14 @@ else
   else
     fail "Could not determine the Claude Code version of ${claude_bin}"
   fi
+  claude_github_mcp=0
   check_claude_config "${claude_config_dir}"
   if ! command -v github-mcp-server >/dev/null; then
-    note 'GitHub MCP requires github-mcp-server on PATH.'
+    if [ "${claude_github_mcp}" = 1 ]; then
+      fail 'The user-level MCP configuration runs github-mcp-server, but it is missing from PATH.'
+    else
+      note 'GitHub MCP requires github-mcp-server on PATH.'
+    fi
   fi
 fi
 

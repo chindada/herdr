@@ -120,10 +120,18 @@ To adopt the new defaults, review the entries copied from the old template:
 
 ### Roles and preferences
 
-An interactive coder can opt into Auto mode and the `fable` model alias
-when their account supports both. Team reviewers use Auto mode so they
-can repair issues in the task checkout during their assigned turn.
-The lead prepares the frozen candidate for each handoff.
+Either team role can use Claude Code. For a new member in the user-authorized
+[team launch mode](../HERDR.md#add-a-member), use
+`claude --dangerously-skip-permissions` with the selected configuration
+directory. The roster and per-turn assignment govern the member's work,
+including Git actions. The first launch in each configuration directory
+can show a native dialog to acknowledge this mode. Answer it once in the
+member's pane. The lead waits and continues onboarding after you clear it.
+
+For approval-based launches, an interactive coder or reviewer can opt into
+Auto mode when the account supports it. An authorized reviewer can repair
+issues in the task checkout during their assigned turn. The lead prepares
+the frozen candidate for each handoff.
 [Herdr review and repair](../HERDR.md#review-and-repair)
 
 Use either Claude alias and adjust the settings file path for the profile.
@@ -138,7 +146,8 @@ Use `/effort` to save an effort level for the active
 model or `--effort` for one launch. Recent models use model-specific saved
 effort in user settings.
 
-Use these Git rules in the role settings file passed with `--settings`.
+For the approval-based workflow, use these Git rules in the role settings
+file passed with `--settings`.
 For a coder, save the example as `~/.claude/herdr-worker.json`. For a
 reviewer, save it as `~/.claude/herdr-reviewer.json`.
 
@@ -162,10 +171,11 @@ operations.
 
 ### Herdr team communication
 
-For a role that reports through `hc`, set up the commands it needs in its
-role settings file before launching it. Manual mode may otherwise ask
-for approval on each shell call. Merge these entries into the file's
-`permissions` object. Use the names chosen for `hc run --name` during
+For a role that reports through `hc` in an approval-based session, set up
+the commands it needs in its role settings file before launching it.
+Manual mode may otherwise ask for approval on each shell call. Merge these
+entries into the file's `permissions` object. Use verified literal addresses
+or the launch aliases chosen for `hc run --name` during
 [Herdr setup](../HERDR.md#prepare-team-communication). Start the chosen
 Claude alias with `--settings` pointing to that file.
 

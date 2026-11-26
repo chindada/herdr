@@ -103,6 +103,13 @@ it over the base user file when you pass `--profile <name>`. Choose model,
 sandbox, approvals, and additional MCP servers for the role.
 The environment check reports a missing profile file before you launch.
 
+Either team role can use Codex. For a new member in the user-authorized
+[team launch mode](../HERDR.md#add-a-member), use `codex --yolo --no-daemon`.
+Keep `--profile <name>` when that member needs the selected profile's
+configuration. `--yolo` selects a launch without Codex sandboxing or approval
+prompts. The workspace-write and on-request settings below describe the
+approval-based mode.
+
 ### GitLab work profile
 
 The [work profile](work.config.toml) adds GitLab.com, enables workspace
@@ -149,7 +156,8 @@ setting into any existing review profile. To opt in, set `enabled = true`
 in that table and export `CONTEXT7_API_KEY` in the pane that will launch
 the reviewer.
 
-Launch from the task checkout with `codex --no-daemon --profile review`.
+For approval-based reviews, launch from the task checkout with
+`codex --no-daemon --profile review`.
 Apply repairs during the turn assigned by the lead and leave the frozen
 candidate intact. Use read-only tooling and scoped credentials for remote
 MCP servers added to this profile.
@@ -158,14 +166,15 @@ MCP servers added to this profile.
 ### Herdr team communication
 
 Codex's filesystem sandboxes can deny the Herdr Core socket. During team
-setup, verify `hc` resolves to your trusted Herdr command. For a role that
-needs to call it, add narrowly scoped rules to
+setup, verify `hc` resolves to your trusted Herdr command. When a sandboxed
+role needs to call it, add narrowly scoped rules to
 `${CODEX_HOME:-$HOME/.codex}/rules/herdr-team.rules`. These rules allow
 matching commands to run outside the sandbox, so list only the team names
 and commands needed by the role. Rules in a Codex home apply to sessions
-using that home and load at startup. Choose the names before starting
-Codex, then pass them to `hc run --name` as described in
-[Herdr setup](../HERDR.md#prepare-team-communication).
+using that home and load at startup. Match a verified literal terminal
+address or launch alias. For a new member that needs a rule in advance,
+choose an alias before starting Codex and pass it to `hc run --name` as
+described in [Herdr setup](../HERDR.md#prepare-team-communication).
 
 This example lets `project-review` inspect itself and report to
 `project-lead`. Use the team's chosen names.
@@ -189,8 +198,9 @@ codex execpolicy check --rules "$rules_dir/herdr-team.rules" -- \
   hc send -- project-lead 'READY'
 ```
 
-The policy check evaluates the command without sending a message. Verify
-the actual READY and report path with the prepared role in Herdr.
+The policy check evaluates the literal tokens without sending a message.
+Changing an address or alias in the command requires a matching rule.
+Verify the actual READY and report path with the prepared role in Herdr.
 
 To let a role compact a teammate's pane, add a rule for the installed
 `herdr-context` helper and the literal authorized target. Verify that

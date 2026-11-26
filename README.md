@@ -26,12 +26,14 @@ teammates in the same space to carry a user's request through delivery.
    Install the [context checkpoint helper](HERDR.md#context-checkpoints)
    and enable its hooks for each CLI on the team.
 4. Run the [environment check](#environment-check), then
-   [launch from the same pane](HERDR.md#quick-start) and verify your MCP
-   connections.
-5. Paste the starter prompt into the lead's pane with your task. Include
-   the roster if it is new or changing. The lead coordinates the
-   [review and repair cycle](HERDR.md#review-and-repair) and brings you
-   the decisions that need your input.
+   [launch from the same pane](HERDR.md#quick-start) and verify any MCP
+   connections you need.
+5. Paste the starter prompt into the running lead's pane. Edit the roster
+   to authorize the roles and launch commands you want. The lead reuses
+   compatible live members, creates missing members, and verifies READY
+   and the requested layout. Paste it on its own to set up the team and
+   leave it on standby, or append a task for the
+   [review and repair cycle](HERDR.md#review-and-repair).
 
 ## Prerequisites
 

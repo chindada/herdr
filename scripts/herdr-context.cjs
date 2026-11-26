@@ -17,7 +17,7 @@ function checkoutRoot(cwd) {
       encoding: "utf8",
       timeout: 2000,
       stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    }).replace(/\n$/, ""); // Strip only Git's terminator to preserve trailing whitespace in the root.
     if (root) return fs.realpathSync(root);
   } catch {
     // Not a Git checkout, or Git is unavailable.
@@ -178,9 +178,13 @@ function compactPeer(selector) {
   }
 
   const cwd = target.foreground?.cwd || target.cwd;
-  if (!cwd || !openState(false) ||
-      !readNote(notePath(target.address, checkoutRoot(cwd)))) {
+  const checkout = cwd && openState(false) ? checkoutRoot(cwd) : "";
+  if (!checkout || !readNote(notePath(target.address, checkout))) {
     throw new Error("The target must record a task note before compaction.");
+  }
+  // Without the owner that SessionStart writes, the target's PreCompact hook blocks.
+  if (!readNote(ownerPath(target.address, checkout))) {
+    throw new Error("The target has no checkpoint session. Enable its SessionStart hook and restart it.");
   }
 
   // Herdr holds keys until a person's typing has been quiet for 3 seconds.
