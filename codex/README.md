@@ -61,15 +61,11 @@ export their values in the launching pane.
 
 ## Context checkpoints
 
-Install the [shared helper](../HERDR.md#context-checkpoints). Use
-[hooks.json](hooks.json) in `${CODEX_HOME:-$HOME/.codex}`. Create the file
-if it is missing, or merge its two hook groups into your existing hooks.
-If you manage hooks in `config.toml`, add the same groups there. Use
-`/hooks` in Codex to review and trust the two definitions before using them,
-and again after replacing an earlier version. Keep the template's `save`
-command as written. It passes `codex` to select the Codex block format,
-and it stops compaction when the helper is missing or fails in a Herdr
-pane.
+Install the [shared helper](../HERDR.md#context-checkpoints). In
+`${CODEX_HOME:-$HOME/.codex}`, choose one hook representation. Use
+[hooks.json](hooks.json), merging the two groups if the file already
+exists, or add the same groups in `config.toml` if you manage hooks there.
+Use the snippet below only if you chose `hooks.json` and need to create it.
 
 ```zsh
 (
@@ -85,6 +81,15 @@ pane.
   fi
 )
 ```
+
+Use `/hooks` in Codex to review and trust both definitions before using
+them, and again after replacing an earlier version. If the session started
+while `SessionStart` was untrusted, start a fresh Codex session after
+trusting the hooks. Then run `herdr-context record` before compacting.
+
+Keep the template's `save` command as written. It passes `codex` to select
+the Codex block format, and it stops compaction when the helper is missing
+or fails in a Herdr pane.
 
 The helper saves before compacting. After compaction, `SessionStart`
 prompts the agent to run `herdr-context load` for the same session's task
@@ -304,6 +309,10 @@ off by default. This setup does not need it. Turn it on under `/experimental`
 only if you want to try it.
 
 ## Verification and launch
+
+For local-only verification, use `scripts/check-env.zsh codex`. The
+`codex mcp list` step can contact configured HTTP MCP servers during
+authentication discovery and send configured headers.
 
 For basic setup, check and launch in the same Herdr pane:
 

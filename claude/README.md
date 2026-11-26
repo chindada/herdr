@@ -154,7 +154,7 @@ reviewer, save it as `~/.claude/herdr-reviewer.json`.
 ```json
 {
   "permissions": {
-    "deny": ["Bash(git commit *)", "Bash(git push *)"]
+    "deny": ["Bash(codegpt commit *)", "Bash(git commit *)", "Bash(git push *)"]
   }
 }
 ```

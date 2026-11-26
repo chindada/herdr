@@ -138,10 +138,10 @@ It uses `CODEX_HOME` or the default path for Codex and `~/.claude` or
 named user files. Full Codex configuration, including trusted project
 settings, is checked separately by the tool's own commands.
 
-The Codex check first uses `uv` to find an installed Python with `tomllib`, then
-tries `python3` on `PATH` if needed. The `uv` probe runs offline with downloads
-disabled and uses temporary storage instead of the persistent cache. The
-Claude Code check uses `jq` when available.
+The Codex check first uses `uv` to find an installed Python 3.11 or later, then
+tries `python3` on `PATH` if needed. The TOML parser requires `tomllib`.
+The `uv` probe runs offline with downloads disabled and uses temporary storage
+instead of the persistent cache. The Claude Code check uses `jq` when available.
 
 When the parser is available, the script checks configuration syntax, basic MCP
 fields, and the local environment variables they reference. It reports only

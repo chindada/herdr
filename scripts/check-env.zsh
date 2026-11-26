@@ -65,7 +65,7 @@ check_mcp_environment() {
 
 codex_mcp_variables() {
   command -v uv >/dev/null || return 3
-  if codex_python=$(uv python find --offline --no-python-downloads \
+  if codex_python=$(uv python find '>=3.11' --offline --no-python-downloads \
       --no-cache --no-project --no-config) &&
       [ -f "${codex_python}" ] && [ -x "${codex_python}" ]; then
     if "${codex_python}" -IB "$@"; then
@@ -123,11 +123,25 @@ check_claude_config() {
   check_file "${claude_mcp_file}" || return
 
   if claude_variables=$(jq -rs '
+    def string_array: type == "array" and all(.[]; type == "string");
+    def string_map: type == "object" and all(.[]; type == "string");
+    def basic_server:
+      if type != "object" then false
+      elif (has("type") | not) or .type == "stdio" then
+        (.command | type == "string" and length > 0)
+        and ((has("args") | not) or (.args | string_array))
+        and ((has("env") | not) or (.env | string_map))
+      elif .type == "http" or .type == "sse" or .type == "streamable-http"
+          or .type == "ws" then
+        (.url | type == "string")
+        and ((has("headers") | not) or (.headers | string_map))
+      else false end;
+
     if length == 1 and (.[0] | type == "object") then .[0]
     else error("Expected one settings object") end
     | if has("mcpServers") then .mcpServers else {} end
     | if type != "object" then error("Expected an MCP server object") else . end
-    | [ .[] | if type != "object" then error("Expected an MCP server") else . end
+    | [ .[] | if basic_server then . else error("Invalid MCP server settings") end
         | (.command, .args, .env, .url, .headers)
         | .. | strings | scan("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}") | .[0] ]
     | unique[]

@@ -3,6 +3,11 @@
 Set up Herdr panes for a team whose lead takes a user request through
 implementation, review, repair, and verification.
 
+Use this file as the team's Herdr guide in any project. Give the team a
+readable path or URL to the guide. Copying it into the project is optional.
+Follow the target project's applicable rules alongside this guide. The Herdr
+source repository's `AGENTS.md` and `CLAUDE.md` apply to that repository.
+
 The manuals that ship with your Herdr version are the source of truth for
 commands. Read both before you run anything here, and use
 `hc <command> --help` and `herdr-app commands` for exact arguments.
@@ -14,16 +19,25 @@ herdr-app --skill
 
 ## Quick start
 
-Open the Herdr space and focus the pane you will work in. In that pane's zsh,
-change to this repository. Export only the credentials the agent needs,
-following the [Claude Code guide](claude/README.md#4-mcp-credentials) or the
-[Codex guide](codex/README.md#mcp-credentials).
+Open the target project's Herdr space, focus the pane you will use, and set
+its working directory to the project's checkout. Keep this directory for
+agent launches and task work. The guide can come from a separate checkout
+or the [canonical GitHub copy](https://github.com/chindada/herdr/blob/main/HERDR.md).
 
-Check the environment for the tool you will launch. Use `codex`, `claude`, or
-`claude-k`. The check fails when a required item such as `uv` is missing.
+The optional profile guides and the environment and checkpoint helper
+scripts live in the Herdr source repository. Resolve profile guide links
+relative to that source. If you use the scripts, set `herdr_source` to the
+absolute path of its checkout on the machine running them. Export only the
+credentials the agent needs, following the
+[Claude Code guide](claude/README.md#4-mcp-credentials) or
+[Codex guide](codex/README.md#mcp-credentials) if needed.
+
+To check the launch environment, run the Herdr source script from the
+target pane with `codex`, `claude`, or `claude-k`. The check fails when a
+required item such as `uv` is missing.
 
 ```zsh
-scripts/check-env.zsh codex
+"$herdr_source/scripts/check-env.zsh" codex
 ```
 
 Launch the agent from the same pane. Codex needs `--no-daemon` in Herdr.
@@ -46,7 +60,7 @@ launch. Install the [work profile](codex/README.md#gitlab-work-profile) first
 if this pane needs GitLab.
 
 ```zsh
-scripts/check-env.zsh codex --profile work
+"$herdr_source/scripts/check-env.zsh" codex --profile work
 codex --no-daemon --profile work
 ```
 
@@ -72,7 +86,7 @@ differ from your shell's. Launch through a login shell you have verified, or
 give the full path of the executable and its configuration directory.
 
 ```zsh
-hc run --bg --name project-lead --cwd "$PWD" -- \
+hc run --bg --cwd "$PWD" -- \
   /bin/zsh -lic 'codex --yolo --no-daemon'
 ```
 
@@ -89,12 +103,15 @@ its variable name.
 Each level proves more and touches more. Use the lowest one that answers your
 question.
 
-| Check | Proves | Starts MCP servers |
+| Check | Proves | Starts or contacts MCP servers |
 | --- | --- | --- |
-| `scripts/check-env.zsh <target>` | Commands, paths, variable names | No |
-| `codex mcp list` | Codex reads the configuration | No |
+| `"$herdr_source/scripts/check-env.zsh" <target>` | Commands, paths, variable names | No |
+| `codex mcp list` | Codex reads the configuration | Can contact configured HTTP MCP servers during authentication discovery and send configured headers |
 | `claude mcp list` | Eligible servers answer | Yes |
 | `/mcp` and one read-only tool call | Credentials and permissions work | Yes |
+
+Use `"$herdr_source/scripts/check-env.zsh" codex` for local-only verification. Add
+`--profile <name>` to include a named user profile.
 
 `claude mcp list` starts every eligible server: the registered ones and the
 approved servers from the current folder's `.mcp.json`. It does not start a
@@ -114,10 +131,15 @@ allows a literal lead alias, such as `project-lead`, query
 `HC_TERMINAL_ID` and keep that address as `lead`. When address-based
 lookup is allowed, query by address as shown below. Capture
 `foreground.cwd` before changing directories and check it against `pwd -P`.
-Resolve the selected space with app status and layout and check that the lead
-belongs to it. If the selected space and the lead's space differ, resolve
-which one the user intends before launching there. Keep the resolved space
-and directory for this setup even when focus changes.
+Resolve the selected space and its actual machine with app status and layout
+and check that the lead belongs to it. If the selected space and the lead's
+space differ, resolve which one the user intends before launching there.
+Keep the resolved machine, space, and target checkout when focus changes.
+
+Run `herdr-app status`, `herdr-app ls`, layout commands, and screenshots
+on the machine hosting the visible Herdr window. If the lead is headless,
+use an authorized operator on that desktop. If desktop operations are
+unavailable, report visibility as pending.
 
 ```zsh
 lead="$HC_TERMINAL_ID"
@@ -137,8 +159,8 @@ Record these values:
   actual address before using it.
 - From `herdr-app status`: the `space`, `tab`, and `focused_pane` the window
   shows now. The shown space can differ from the lead's own space.
-- From `herdr-app ls`: each space's `id` and `name`, and the `terminal`
-  address, `pane`, and `status` of every terminal in the team's space.
+- From `herdr-app ls`: the team's space `id`, `name`, and `machine` (local if
+  unset), and its tab IDs, `pane` IDs, `terminal` addresses, and statuses.
 
 ### Agree on the roster
 
@@ -163,9 +185,10 @@ Use the onboarding READY message to verify the member's return path.
 When a role needs permission for the local Herdr connection, configure
 it during setup.
 
-Use actual terminal addresses in the roster, titles, and READY reports.
-An immutable `hc run --name` launch alias can still be used in an
-approval-based setup to prepare narrow rules before an address is assigned.
+Use actual terminal addresses as member names in the roster, native titles,
+and READY reports. Omit launch aliases by default. An immutable
+`hc run --name` launch alias can still be used in an approval-based setup to
+prepare narrow rules before an address is assigned.
 Reserve such aliases for the team and preserve them on reuse. Use a verified
 literal address or alias supported by the current rule. A native title
 change leaves the launch alias and its rules in place.
@@ -182,14 +205,18 @@ and the verdict in its pane for the lead to read.
 ### Add a member
 
 Use `hc run --bg` for every new interactive member. Bind `project_dir`
-and `space_id` to the resolved directory and space ID. Use the verified
-`lead` address and prepare an `onboarding_prompt` for that member's role
-using [Onboard a member](#onboard-a-member). Pass it as the first
+and `space_id` to the verified target checkout and space ID. Use the
+verified `lead` address and prepare an `onboarding_prompt` for that member's
+role using [Onboard a member](#onboard-a-member). Pass it as the first
 positional prompt. The same launch works for either role.
 
 These visible-team examples opt into the space with `herdr.space`.
 A `herdr.tab` label selects a tab. Without it, Herdr can create a
-temporary tab in the space.
+temporary tab in the space. Labels control placement in the window.
+A lead on the owning core launches there with its verified local address.
+From another core, verify the route with `hc machine ls` and use qualified
+addresses for remote terminals. Use `hc run --on <machine>` with the
+checkout path on that machine and keep the returned full address.
 For a requested shared layout, use [Show the team](#show-the-team) to
 move the same authorized terminals into the lead's tab.
 
@@ -212,6 +239,10 @@ Without it, Claude Code reads a different configuration than the profile
 aliases. Alternatively, launch a Claude alias through a verified login
 shell. When wrapping a launch in zsh, pass the onboarding text as a
 positional argument to the shell.
+
+For `--on` launches, use executable and profile paths verified on the target
+machine, or expand `HOME` inside a verified target login shell. The `$HOME`
+in the local example expands on the caller.
 
 ```zsh
 hc run --bg --cwd "$project_dir" --parent "$lead" \
@@ -250,7 +281,7 @@ pane as described in [Show the team](#show-the-team), so a person can enter
 the credentials, run the environment check, and launch the agent there.
 
 ```zsh
-hc run --bg --name project-mcp --cwd /path/to/repo --parent "$HC_TERMINAL_ID"
+hc run --bg --cwd "$project_dir" --parent "$lead"
 ```
 
 A member ends when its parent ends unless you add `--outlive-parent`.
@@ -275,6 +306,11 @@ hc send -- "$member" "$onboarding_prompt"
 
 These commands change what the person sees. Run them only for a layout the
 person asked for, and leave other tabs, panes, and running programs alone.
+
+For the standard four-member roster, use one large, full-height lead pane
+alongside a 2 by 2 grid of four equal member panes in the shared tab.
+Follow any layout the user requests and adapt the arrangement to other
+roster sizes.
 
 When Pixel HQ visibility is requested, verify each member's space label and
 pin each member as soon as its launch is verified. Recheck the pin on reused
@@ -351,41 +387,94 @@ herdr-app shot "$team_shot"
 
 ### Onboard a member
 
-Use this prompt for each member. Supply the verified lead address and
-directory, expected space, assigned role, and the reporting path agreed in
+Use this prompt for each member. Supply a guide reference the member can
+read, the verified lead address, checkout and space, the assigned role,
+and the return path agreed in
 [Prepare team communication](#prepare-team-communication).
 
 ```text
-You are joining a Herdr team in this repository.
+You are joining a Herdr team. Herdr guide: <readable path or URL>.
 Lead and expected parent: <lead-address>. Role: <role>.
-Expected working directory: <project-dir>. Expected space: <name and ID>.
+Expected checkout: <absolute project-dir>. Expected space: <name, ID, machine>.
 
 This step is setup only. Leave the checkout and layout as they are.
 
-1. Read CLAUDE.md, AGENTS.md, and HERDR.md in this repository.
-2. Confirm your actual HC_TERMINAL_ID, working directory, and role.
-3. Reply with READY, your actual member address, expected parent and space,
-   working directory, role, and rules read. Use hc send -- <lead-address>
-   "<reply>" when authorized, using the verified alias if required,
-   or print the reply in your pane for the lead to read.
+1. Read the supplied Herdr guide and any applicable rules present in the
+   target project. Name the references you actually read.
+2. Use pwd -P and hc get -- "$HC_TERMINAL_ID" to verify your live address,
+   parent, space and foreground working directory. Verify the lead's address.
+3. Reply with READY and the terminal=, role=, space= and cwd= fields.
+   Include the verified parent and rules read. Use hc send -- <lead-address>
+   "<reply>" when authorized, using a verified alias if required. Otherwise,
+   print the reply in your pane.
 
 Stay interactive and wait for an assignment from the lead.
 Launch authority belongs to the lead. A review assignment specifies
 whether you are the editor for that turn. Bring questions and blockers
 to the lead. The designated lead handles authorized commits.
+Use English for agent work and records. Use Taiwan Traditional Chinese
+for human-facing text and short hc replies. Preserve protocol fields.
 ```
 
 A member is ready when the lead has its READY reply and has verified the
-live address, foreground CLI and working directory, parent, space, and
-assigned role. A setup-only request ends with a readiness and visibility
-report. Keep the team available for later assignments.
+live address, foreground CLI and working directory, parent, space, machine,
+and assigned role. In a setup-only turn, verify readiness and any requested
+visibility, then leave the existing sessions available for assignments.
+
+### Run an assignment
+
+Maintain one short roster and task record. Keep the verified checkout,
+space and machine, tab and panes, member addresses and roles, current phase,
+sole checkout editor, authorized scope, and immutable artifact references.
+Record status and open questions there as they arise. When using checkpoints,
+keep the record in the note if it fits or link to the approved handoff
+record from the note. The lead resumes from the record when a result or
+direction arrives. Wait for work with an outstanding handback.
+
+For a substantial handoff, use the location approved by the user or project.
+Otherwise, use an absolute shared path outside the checkout that every
+assigned member can read. For separate machines without a shared path, use
+a targeted transfer such as `hc put` to the verified member. Record the
+destination path and confirm the copied artifact's digest.
+
+Give each assignment an owner, editor or read-only designation, branch and
+checkout, baseline or candidate, allowed paths, any skills needed, checks,
+dependencies, reporting path, and stop condition. Repeat the
+[language instruction](#language). Before sending, verify the recipient's
+live address, role, parent, space, machine, and cwd against the record.
+Set `member` to the verified address or required alias. Confirm the
+assignment began through a new reported working turn or the member's
+acknowledgement. For uncertain delivery, inspect the member's status and
+screen before resending.
+
+```zsh
+hc wait --timeout 45 -- "$member"
+hc get -- "$member"
+hc read --lines 0 -- "$member"
+```
+
+Inspect the wait reason and current state. With `reason: message`, read the
+incoming message. With `reason: timeout`, check progress before waiting
+again. A live terminal can finish a turn and stay available. A terminal
+exit ends the program and may leave the assignment unfinished. Read the
+actual handback or blocker before advancing the task.
+
+Keep idle members productive. At each dispatch, handback, or dependency
+stall, check which members are available. Proactively give suitable idle
+members useful independent work within the authorized scope, such as
+reproductions, fixtures, review, evidence readback, or preparation for the
+next step. Give each member one bounded active unit at a time, reserve
+reviewer capacity for upcoming candidates, and keep a single editor for
+each shared checkout or resource. When nothing useful can advance within
+scope, or the user has paused the work, let the member stand by.
 
 ### Review and repair
 
 Assign one coder and at least one reviewer. When both CLIs are available,
-use a reviewer on a different CLI from the coder. The lead names the task
-checkout and the editor for each turn. Only that editor changes files in
-the checkout, and each handoff ends the editor's turn.
+use a reviewer on a different CLI from the coder. Record each reviewer's
+address, CLI, snapshot, and whether they authored any changes. The lead
+names the task checkout and the editor for each turn. Only that editor
+changes files in the checkout, and each handoff ends the editor's turn.
 
 1. The lead gives the coder the starting snapshot, task scope, constraints,
    required checks, and reporting path. The coder implements the task, runs
@@ -414,14 +503,16 @@ the checkout, and each handoff ends the editor's turn.
    commit, also meet the [team commit checks](#commit-reviewed-changes).
 
 For each handoff after edits, the lead archives the exact candidate files
-outside the checkout. Keep relative paths and executable modes, include
-intended new files, and exclude credentials and other local state.
+at the location agreed in [Run an assignment](#run-an-assignment).
+Keep relative paths and executable modes, include intended new files,
+and exclude credentials and other local state.
+Record intended deletions with the candidate, including old rename paths.
 Verify the archive digest and extract it to a new directory. Remove write
 permission with `chmod -R a-w "$candidate_dir"`, where `candidate_dir`
 is the absolute path to the extracted tree. Give each participant the
-archive, its digest, and the extracted path. Verify the digest before and
-after inspection. Run checks that need to write in an authorized location
-outside the frozen copy.
+archive, its digest, the extracted path, and the deletion list. Verify the
+digest before and after inspection. Run checks that need to write in an
+authorized location outside the frozen copy.
 
 Compute the digest like this, where `candidate_archive` is the absolute path
 of the finished archive.
@@ -432,16 +523,22 @@ shasum -a 256 -- "$candidate_archive"
 
 ### Commit reviewed changes
 
-The user authorizes commits and pushes separately. For an authorized
-commit, the designated lead needs `codegpt` on `PATH`. Check the target
-branch and its expected tip, then stage only the approved changes.
+`HERDR.md` is the sole team guide for commit policy.
+`codegpt commit --no_confirm` is the sole permitted way to create a commit
+in this repository and for teams following this workflow. The user
+authorizes commits and pushes separately.
+Only the designated lead creates an authorized team commit. The lead needs
+`codegpt` on `PATH`. Check the target branch and its expected tip, then stage
+only the approved changes.
 The review and repair loop can finish with one reviewer. Before committing,
-obtain a second independent review so each change has two reviewers who
-did not write it. Both reviews must apply to the accepted candidate.
+each change needs two independent reviews by reviewers who did not write
+that change. Both reviews must apply to the same final snapshot and cite
+its digest.
 
 Verify the candidate's contents and file modes. Use a temporary Git index
-based on the expected tip to build the Git tree from the frozen candidate.
-Record that tree as `reviewed_tree` and compare it with the staged changes.
+based on the expected tip. Remove the candidate's recorded deletion paths
+from that index before adding the frozen candidate files. Record the
+resulting tree as `reviewed_tree` and compare it with the staged changes.
 
 ```zsh
 test "$(git write-tree)" = "$reviewed_tree" &&
@@ -455,30 +552,28 @@ has the expected state. A push requires its own authorization.
 ### Reports and stalled work
 
 Members report to the lead when they finish or get stuck. Every handback,
-including a coder confirmation or reviewer verdict without edits, includes
-the SHA-256 of the snapshot examined, fixes or `none`, and check results
-or `not run`. Send the result directly or print it in the pane if that is
-the configured return path. The lead records it with the task. Use a report
-file when the role has an authorized writable location. Replace
-`project-lead` and `<sha256>` with the verified lead name and snapshot digest.
+including a coder confirmation or reviewer verdict without edits, identifies
+the immutable inputs actually examined or used to run checks. Include the
+snapshot SHA-256, fixes or `none`, commands and recorded exit statuses, and
+any checks skipped, `not run`, or blocked. Distinguish source inspection
+from runtime checks. For runtime checks, record relevant installed tool
+versions and the execution and configuration used, such as the machine,
+profile, and digests of installed helpers or settings files. The lead
+records the result with the task and checks the final delta. Reuse accepted
+evidence when the relevant inputs still match, and attribute it to the
+member and CLI that produced it. The commit procedure still needs separate
+user authorization.
+
+Write the English technical report to the approved writable location when
+available. Otherwise deliver it with the same required fields through an
+authorized channel, including the pane if agreed. Use Taiwan Traditional
+Chinese for the short human-facing status or file pointer. Send it to the
+verified lead or print it in the pane if that is the agreed return path.
 
 ```zsh
-hc send -- project-lead \
-  'Snapshot SHA-256: <sha256>. Fixes: none.
-Checks: Markdown lint passed. Verdict: clean.'
+hc send -- "$lead" \
+  '快照 SHA-256 <sha256>。修正：無。Markdown 檢查通過，無待修問題。報告 /path/to/report.md。'
 ```
-
-The lead waits with `hc`, not with `sleep`, and reads a member's screen to
-see what happened.
-
-```zsh
-hc wait --timeout 45 -- project-review
-hc get -- project-review
-hc read --lines 0 -- project-review
-```
-
-Use the team's verified member names. Check why a wait returned and
-read the handback before considering a task complete.
 
 Read the screen when a member is blocked. Continue independent work or
 use an available authorized path if the blocked step is optional. Ask the
@@ -487,17 +582,26 @@ Leave the permission prompt for the user to answer.
 
 ### Context checkpoints
 
-From this repository, install the shared helper. Run the same command
-again after pulling an updated helper.
+Checkpoint use requires the shared helper and both hooks. Install the helper
+from the Herdr source checkout. Run the same command after updating it.
 
 ```zsh
 mkdir -p "$HOME/.local/bin"
-install -m 0755 scripts/herdr-context.cjs "$HOME/.local/bin/herdr-context"
+install -m 0755 "$herdr_source/scripts/herdr-context.cjs" "$HOME/.local/bin/herdr-context"
 ```
 
 Enable the hooks in the [Codex guide](codex/README.md#context-checkpoints)
 and the [Claude Code guide](claude/README.md#3-configuration) for each
-configuration that launches team panes.
+configuration that launches team panes. Use one hook representation per
+Codex user configuration. If Codex already started with an untrusted
+`SessionStart` hook, trust both hooks in `/hooks` and start a fresh Codex
+session before recording the task note and compacting.
+
+Start each agent CLI in its assigned checkout. At startup, its
+`SessionStart` hook initializes checkpoint ownership for that checkout and
+clears any old note, so a new session starts without one. When you launch
+the CLI with `hc run`, pass that directory with `--cwd`. Starting it from
+a shell already in the checkout, such as an existing pane, also works.
 
 Lead, coder, and reviewer each keep their own short note. Run
 `herdr-context record` from the assigned checkout at the start of a task,
@@ -526,7 +630,8 @@ session has no note or the save fails, including when the helper is
 missing or exits with an error. A Codex hook that is untrusted or times
 out cannot protect compaction, so confirm both hooks with `/hooks`. After
 compaction, `SessionStart` prompts the agent to run `herdr-context load`
-in the same checkout. The command returns the saved note as task data.
+in the same checkout. Load the saved task data and verify it against the
+latest assignment and candidate before recording a replacement note.
 
 Run one interactive agent per Herdr pane. For a nested Codex or Claude Code
 smoke test, prefix the CLI executable with `env -u HC_TERMINAL_ID` so its
@@ -535,26 +640,38 @@ startup hooks leave the parent pane's task note alone.
 Choose to compact at a useful stopping point while there is still room
 to record the note. Update the note, request compaction from a teammate,
 and end the current turn. The lead can ask a teammate to do the same for
-its own pane. The teammate verifies the request and the target's space
-and address, waits for the turn to end, and checks the screen for an
-empty input prompt before invoking the helper. Both panes must be in the
-same space. A pane's own `herdr.space` label sets its space. A hidden
-member without that label uses the label of its live parent, such as the
-lead's pane. The helper refuses a target in another space or with no space.
+its own pane. Pause routine sends to the target until it is ready again.
+The teammate verifies the request and the target's space and address, then
+waits for the turn to end and reads the screen. Set `peer` to that verified
+address or required alias. Both panes must be in the same space. A pane's
+own `herdr.space` label sets its space. A hidden member without that label
+uses the label of its live parent. The helper refuses a target in another
+space or with no space.
 
 ```zsh
-hc wait --timeout 45 -- project-review
-hc read --lines 0 -- project-review
-herdr-context compact project-review
+hc wait --timeout 45 -- "$peer"
+hc read --lines 0 -- "$peer"
+```
+
+Look at that screen right away. Continue only if the composer is empty
+and the pane shows no dialog or draft. Then invoke the helper on its own.
+
+```zsh
+herdr-context compact "$peer"
 ```
 
 The helper types only `/compact` into the designated pane. It refuses a
-target that is working, blocked, or in error. Herdr holds the keys while a
-person is typing in that pane, and the helper reports a failure if they are
-not delivered within 15 seconds. Read the screen before trying again. Wait
-and read the screen to confirm compaction succeeded. Send the next
-assignment or continuation once the pane is ready. The agent checks the
-loaded task data against the latest task and candidate before continuing.
+target that is working, blocked, or in error. Herdr waits for typing to
+pause, then sends the keys. An unsent draft can still be present after
+the pause, and the helper's Enter can submit it. The helper reports a
+failure if the keys are not delivered within 15 seconds. Read the screen
+before trying again. After the helper returns, wait and check the live
+session and its screen to confirm compaction succeeded and the composer
+is ready. The teammate reports completion to the lead. The lead resumes
+its own work from the record or sends the member one continuation for the
+recorded assignment. The lead dispatches the next assignment when the
+current one is complete. Check the pane before repeating a continuation
+whose delivery is unclear.
 
 If a pane reaches its context limit without a usable prompt, or shows a
 dialog, an error, or a person's draft, do not type into it. Tell the
@@ -569,9 +686,17 @@ automatic and manual compaction when the CLI triggers them.
 
 ### Language
 
-Write prompts, assignments, reports, and repository content in English. Write
-on-screen updates for the person and short `hc send` handbacks in Traditional
-Chinese (Taiwan).
+Use English for agent instructions and assignments, durable reports and
+checkpoints, and repository prose. Use Taiwan Traditional Chinese for
+human-facing terminal and chat text, including final replies and short
+`hc send` status messages and report pointers. Keep commands, addresses,
+hashes, paths, and the protocol literals `READY`, `terminal=`, `role=`,
+`space=`, and `cwd=` exact.
+
+```text
+READY terminal=t7 role=reviewer space=sp123 cwd=/srv/project
+已核對上層 t3。已讀 /srv/guides/HERDR.md。待命。
+```
 
 ## Starter prompt
 
@@ -580,13 +705,17 @@ and launch commands you want. Use it on its own for setup, or append a task
 to start after READY.
 
 ```text
-Act as the lead for this Herdr space. Read HERDR.md in the current
-checkout, or use the GitHub copy if the local file is unavailable:
+Act as the lead for this Herdr space.
+Guide reference: <readable path or URL, if supplied>.
+Target checkout: <absolute path, or resolve from this pane>.
+Read the supplied guide first. If unavailable, use a readable local
+copy of this guide when present, then fall back to the canonical copy:
 https://github.com/chindada/herdr/blob/main/HERDR.md
+Read any applicable rules present in the target project.
 
 Read the installed hc and herdr-app manuals. Use this terminal as the lead.
-Resolve the current working directory, lead address, and selected Herdr
-space from live state.
+Verify the target working directory, lead address, and selected machine
+and space from live state. Use the target checkout for assignments.
 
 Authorized roster and launch commands:
 - Codex coder: codex --yolo --no-daemon
@@ -595,17 +724,25 @@ Authorized roster and launch commands:
 - Claude reviewer: claude --dangerously-skip-permissions
 
 Reuse matching live authorized members and launch only missing members as
-interactive children. Record actual terminal addresses and verified CLI,
-working directory, parent, and space. Report permission or launch-mode
-mismatches and preserve existing sessions.
+interactive children. Use actual addresses as names. Omit new aliases
+unless narrow permission rules need them. Record the verified roster and
+preserve existing sessions when reporting permission or launch mismatches.
 
-Onboard each member and verify READY. Pin the members and show the team
-in one shared tab with distinct split panes. Set native titles to actual
-addresses and verify independent Pixel HQ visibility with a screenshot.
-Report the roster, readiness, and any blockers.
+Give each member the guide reference and verify its READY reply with
+terminal=, role=, space= and cwd=. Pin the members and show the team in one
+shared tab with distinct split panes. For the standard four-member roster,
+use one large, full-height lead pane alongside a 2 by 2 grid of four equal
+member panes. Follow any layout I request and adapt to other roster sizes.
+Set native titles to actual addresses and verify independent Pixel HQ
+visibility with a screenshot. Report the roster, readiness, and any blockers.
 
 If I supply a task, start it once its assigned members are READY and
-follow Review and repair and Commit reviewed changes in HERDR.md.
-Otherwise this is setup only. Keep everyone interactive and on standby
-for an assignment.
+follow Run an assignment and Review and repair. Use Commit reviewed
+changes when I authorize a commit. Otherwise verify setup only and keep
+the team interactive.
+
+Use English for agent instructions, reports, checkpoints and repo prose.
+Use Taiwan Traditional Chinese for human-facing text and short hc status
+or report pointers. Preserve commands, paths, hashes and protocol fields.
+Repeat the language instruction when assigning work.
 ```
