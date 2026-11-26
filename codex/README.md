@@ -1,7 +1,8 @@
 # Set up the Codex development environment
 
-Complete the [shared prerequisites](../README.md#prerequisites), then run these
-commands from the repository root in a Herdr terminal.
+Complete the [shared prerequisites](../README.md#prerequisites). Run setup
+commands that read local templates from the Herdr source checkout. Run
+[verification and launch](#verification-and-launch) in the target pane.
 
 ## Installation
 
@@ -181,11 +182,13 @@ address or launch alias. For a new member that needs a rule in advance,
 choose an alias before starting Codex and pass it to `hc run --name` as
 described in [Herdr setup](../HERDR.md#prepare-team-communication).
 
-This example lets `project-review` inspect itself and report to
-`project-lead`. Use the team's chosen names.
+This example lets `project-review` look up itself and `project-lead`, then
+report to `project-lead`. Use the team's verified literal selectors. Match
+both returned addresses to the roster before sending.
 
 ```starlark
 prefix_rule(pattern = ["hc", "get", "--", "project-review"], decision = "allow")
+prefix_rule(pattern = ["hc", "get", "--", "project-lead"], decision = "allow")
 prefix_rule(pattern = ["hc", "send", "--", "project-lead"], decision = "allow")
 ```
 
@@ -199,13 +202,15 @@ command. Match and verify each rule before dispatch.
 
 ```zsh
 rules_dir="${CODEX_HOME:-$HOME/.codex}/rules"
-codex execpolicy check --rules "$rules_dir/herdr-team.rules" -- \
-  hc send -- project-lead 'READY'
+policy_home=$(mktemp -d) &&
+  env CODEX_HOME="$policy_home" codex execpolicy check \
+    --rules "$rules_dir/herdr-team.rules" -- hc send -- project-lead 'READY'
 ```
 
-The policy check evaluates the literal tokens without sending a message.
-Changing an address or alias in the command requires a matching rule.
-Verify the actual READY and report path with the prepared role in Herdr.
+The check reads the selected rules and uses scratch for startup files. Check
+both `hc get` selectors and the separate `hc send` selector this way. Each
+should match its own rule, and an unrelated terminal should have no match.
+Verify the READY return path with the prepared role in Herdr.
 
 To let a role compact a teammate's pane, add a rule for the installed
 `herdr-context` helper and the literal authorized target. Verify that
@@ -310,23 +315,24 @@ only if you want to try it.
 
 ## Verification and launch
 
-For local-only verification, use `scripts/check-env.zsh codex`. The
-`codex mcp list` step can contact configured HTTP MCP servers during
-authentication discovery and send configured headers.
+In the Herdr pane for the target checkout, set `herdr_source` to the verified
+absolute source checkout path. Check and launch with the same profile and
+environment. The offline check runs separately from `codex mcp list`, which
+can contact configured HTTP MCP servers and send configured headers.
+[Herdr launch rules](../HERDR.md#launch-rules)
 
-For basic setup, check and launch in the same Herdr pane:
+Use the base profile by default.
 
 ```zsh
-scripts/check-env.zsh codex
+"$herdr_source/scripts/check-env.zsh" codex
 codex mcp list
 codex --no-daemon
 ```
 
-For a named profile, use the same name for each step. This example uses the
-work profile:
+Use the same name for each named-profile command. This example uses `work`.
 
 ```zsh
-scripts/check-env.zsh codex --profile work
+"$herdr_source/scripts/check-env.zsh" codex --profile work
 codex --profile work mcp list
 codex --no-daemon --profile work
 ```

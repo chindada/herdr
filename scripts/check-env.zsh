@@ -44,9 +44,20 @@ check_file() {
   fi
 }
 
+# Design: report whether each named MCP credential is exported and nonempty
+# without printing its value. A missing awk is its own failure, distinct from
+# an unset variable.
+# Implementation: awk is resolved on PATH once; ENVIRON reads only exported
+# variables. The names arrive one per line.
+# Example: check_mcp_environment 'CONTEXT7_API_KEY' prints
+# "[OK] CONTEXT7_API_KEY is exported and nonempty" or an unset error.
 check_mcp_environment() {
   if [ -z "$1" ]; then
     note 'The current MCP configuration has no local environment variables to check.'
+    return
+  fi
+  if ! command -v awk >/dev/null; then
+    fail 'awk is missing from PATH, so the MCP credential variables could not be checked.'
     return
   fi
   newline='
@@ -55,7 +66,7 @@ check_mcp_environment() {
   while [ -n "${pending}" ]; do
     variable_name=${pending%%"${newline}"*}
     pending=${pending#*"${newline}"}
-    if /usr/bin/awk -v name="${variable_name}" 'BEGIN { exit(length(ENVIRON[name]) == 0) }' </dev/null; then
+    if awk -v name="${variable_name}" 'BEGIN { exit(length(ENVIRON[name]) == 0) }' </dev/null; then
       ok "${variable_name} is exported and nonempty"
     else
       fail "${variable_name} is unset, unexported, or empty"
@@ -63,10 +74,18 @@ check_mcp_environment() {
   done
 }
 
+# Design: run the TOML companion with a Python 3.11+ interpreter. Prefer the
+# interpreter uv finds offline, and fall back to python3 when uv is absent or
+# its interpreter cannot run the script. Missing uv is reported separately by
+# the required-tool loop, not here.
+# Implementation: status 3 means no usable tomllib (a skipped check); other
+# nonzero statuses are parse failures.
+# Example: codex_mcp_variables scripts/check-codex-config.py ~/.codex/config.toml
+# prints one variable name per line and returns 0.
 codex_mcp_variables() {
-  command -v uv >/dev/null || return 3
-  if codex_python=$(uv python find '>=3.11' --offline --no-python-downloads \
-      --no-cache --no-project --no-config) &&
+  if command -v uv >/dev/null &&
+      codex_python=$(uv python find '>=3.11' --offline --no-python-downloads \
+        --no-cache --no-project --no-config) &&
       [ -f "${codex_python}" ] && [ -x "${codex_python}" ]; then
     if "${codex_python}" -IB "$@"; then
       return 0
@@ -83,17 +102,28 @@ codex_mcp_variables() {
   python3 -IB "$@"
 }
 
+# Design: check the selected Codex files, then their MCP variable names. The
+# companion parser must exist beside this script before its result is
+# interpreted, so a missing companion is not reported as invalid TOML.
+# Implementation: the companion path is derived from the invoked path of
+# this script; a symlinked entry point outside scripts/ has no companion.
+# Example: check_codex_config ~/.codex/config.toml ~/.codex/work.config.toml
 check_codex_config() {
   for codex_config_file do
     check_file "${codex_config_file}" || return
   done
 
-  if codex_variables=$(codex_mcp_variables "${script_dir}/check-codex-config.py" "$@" 2>/dev/null); then
+  codex_companion="${script_dir}/check-codex-config.py"
+  if [ ! -f "${codex_companion}" ] || [ ! -r "${codex_companion}" ]; then
+    fail "Missing or unreadable Codex checker companion ${codex_companion}. Run check-env.zsh by its path inside the Herdr scripts directory."
+    return
+  fi
+  if codex_variables=$(codex_mcp_variables "${codex_companion}" "$@" 2>/dev/null); then
     ok 'Checked Codex TOML syntax and basic MCP fields'
     check_mcp_environment "${codex_variables}"
   else
     case "$?" in
-      3) note 'Skipped TOML and MCP credential checks. They require uv and an installed Python with tomllib.' ;;
+      3) note 'Skipped TOML and MCP credential checks. They require Python 3.11 or later with tomllib, found through uv or python3.' ;;
       *) fail "Could not parse the selected Codex TOML or combined MCP settings in $*" ;;
     esac
   fi
@@ -160,16 +190,33 @@ check_claude_config() {
 printf 'Checking %s\n' "${target}"
 if [ -n "${HC_TERMINAL_ID:-}" ]; then
   ok 'Detected the current Herdr terminal'
+  # Design: the hooks run the installed helper and agents run the one on
+  # PATH, so both must be the same file with the same content as this
+  # checkout's source. Stale content and a shadowing helper fail separately;
+  # an equivalent symlink passes.
+  # Implementation: cmp compares bytes with the source beside this script,
+  # and the shell test -ef compares the resolved files without extra tools.
+  # Example: after `install -m 0755 scripts/herdr-context.cjs ~/.local/bin/herdr-context`,
+  # both checks print [OK]; an older copy prints "... is stale".
   context_helper="${HOME}/.local/bin/herdr-context"
-  if [ -f "${context_helper}" ] && [ -x "${context_helper}" ]; then
-    ok "Context checkpoint helper is installed at ${context_helper}"
-  else
+  context_source="${script_dir}/herdr-context.cjs"
+  if [ ! -f "${context_helper}" ] || [ ! -x "${context_helper}" ]; then
     fail "Install the context checkpoint helper as an executable at ${context_helper}"
+  elif [ ! -f "${context_source}" ] || [ ! -r "${context_source}" ]; then
+    fail "Could not compare the context checkpoint helper: missing or unreadable source ${context_source}"
+  elif ! command -v cmp >/dev/null; then
+    fail 'cmp is missing from PATH, so the context checkpoint helper could not be compared with its source.'
+  elif cmp -s "${context_source}" "${context_helper}"; then
+    ok "Context checkpoint helper at ${context_helper} matches ${context_source}"
+  else
+    fail "The context checkpoint helper at ${context_helper} is stale. Reinstall it from ${context_source}."
   fi
-  if command -v herdr-context >/dev/null; then
+  if ! context_command=$(command -v herdr-context); then
+    fail 'herdr-context is missing from PATH. Add ~/.local/bin to PATH.'
+  elif [ "${context_command}" -ef "${context_helper}" ]; then
     ok 'herdr-context is on PATH'
   else
-    fail 'herdr-context is missing from PATH. Add ~/.local/bin to PATH.'
+    fail "herdr-context on PATH is ${context_command}, which shadows ${context_helper}."
   fi
 else
   note 'HC_TERMINAL_ID is missing. Run this check from the Herdr terminal where you launch the tool.'

@@ -1,7 +1,8 @@
 # Set up the Claude Code development environment
 
-Complete the [shared prerequisites](../README.md#prerequisites), then run these
-commands from the repository root in a Herdr terminal.
+Complete the [shared prerequisites](../README.md#prerequisites). Run setup
+commands that read local templates from the Herdr source checkout. Run the
+[launch checks](#7-sign-in-and-verify) in the target pane.
 
 `claude` is the primary profile. Run the `claude-k` commands if you need a
 second, independent profile.
@@ -97,10 +98,10 @@ second directory from the loop if you only use the primary profile.
 Back up each profile's `settings.json` and merge the template. Replace
 `PreCompact`, `SessionStart`, and `statusLine` entries copied from an
 earlier template with the current ones, and set `autoCompactEnabled` to
-`false`. The `SessionStart` group has no matcher, so it runs for every
-session source. The `PreCompact` hook sets `onFailure` to `block`, so a
-missing or failing helper stops compaction in a Herdr pane. Confirm the two
-checkpoint hooks are loaded with `/hooks`.
+`false`. The `SessionStart` command calls the helper for every session source
+in a Herdr pane. Claude Code 2.1.295 or later supports `onFailure: "block"`
+on the `PreCompact` handler, which stops compaction when the helper fails or
+is missing. Confirm the two checkpoint hooks are loaded with `/hooks`.
 [Claude Code hooks](https://code.claude.com/docs/en/hooks)
 
 To adopt the new defaults, review the entries copied from the old template:
@@ -179,10 +180,18 @@ or the launch aliases chosen for `hc run --name` during
 [Herdr setup](../HERDR.md#prepare-team-communication). Start the chosen
 Claude alias with `--settings` pointing to that file.
 
+This example lets `project-review` look up itself and `project-lead`, then
+report to `project-lead`. Match both returned addresses to the roster before
+sending.
+
 ```json
 {
   "permissions": {
-    "allow": ["Bash(hc get -- project-review)", "Bash(hc send -- project-lead *)"]
+    "allow": [
+      "Bash(hc get -- project-review)",
+      "Bash(hc get -- project-lead)",
+      "Bash(hc send -- project-lead *)"
+    ]
   }
 }
 ```
@@ -223,14 +232,21 @@ them. In an existing `settings.json`, replace only the `statusLine` value:
 }
 ```
 
-To show the same values in Herdr's Pixel HQ layout, export
-`HERDR_STATUSLINE_LABELS=1` in the terminal before you launch Claude Code.
-The script then sets the `agent.model`, `agent.context`, `agent.quota`, and
-`agent.effort` labels on that terminal with `hc label`. Without the variable,
-the script only prints the footer.
+To opt in to labels for Pixel HQ, export `HERDR_STATUSLINE_LABELS=1` in the
+child shell that will launch Claude Code. For `hc run`, you can prefix the
+authorized Claude executable with `env HERDR_STATUSLINE_LABELS=1` after `--`.
+The Core uses its own environment and explicit child overrides. Set the
+option in the child even if it is already exported in the lead shell.
+[Herdr Core launch source](https://github.com/herdrdev/herdr-core/blob/master/crates/herdr-core/src/api/run.rs)
 
-If the terminal already ran Pixel HQ's own status line, start a fresh pane.
-Its `claude.*` labels take precedence over the `agent.*` labels.
+The default is the terminal footer. Opt-in adds the `agent.model`,
+`agent.context`, `agent.quota`, and `agent.effort` labels through `hc label`.
+Pixel HQ prefers `claude.*` labels when present and falls back to `agent.*`.
+The quota requires Claude Code's five-hour usage field.
+
+If the terminal already ran Pixel HQ's own status line, its stale `claude.*`
+labels stay on that terminal and hide the `agent.*` labels. Start a fresh pane
+for the opted-in launch.
 
 ### Project MCP servers
 
@@ -381,9 +397,19 @@ claude-k plugin install typesafe@typesafe-ai
 
 ## 7. Sign in and verify
 
-Launch the profile from the Herdr terminal where you exported its credentials.
-Use `/login` on first launch and `/mcp` to check the connections. You can also
-list the installed MCP servers and plugins from the same terminal.
+From the target checkout in the Herdr pane that will run Claude Code, set
+`herdr_source` to the verified absolute source checkout path. Run the offline
+check for the profile you will launch. Use the pane and shell where you
+prepared its credentials. [Herdr launch rules](../HERDR.md#launch-rules)
+
+```sh
+"$herdr_source/scripts/check-env.zsh" claude
+"$herdr_source/scripts/check-env.zsh" claude-k
+```
+
+Launch that profile, use `/login` on first launch, and check the required
+connections with `/mcp`. You can list the installed servers and plugins from
+the same terminal.
 
 ```sh
 claude mcp list

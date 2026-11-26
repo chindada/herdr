@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const { createHash, randomUUID } = require("node:crypto");
 const fs = require("node:fs");
 const { isAbsolute, join } = require("node:path");
@@ -10,19 +10,39 @@ const pane = process.env.HC_TERMINAL_ID;
 const stateDir = join("/tmp", `herdr-context-${process.getuid()}`);
 const maxNoteBytes = 2048;
 
-// Notes belong to the Git checkout root, or to the real directory outside Git.
+// Design: notes belong to a checkout, which is the Git top-level directory
+// (submodules and separate worktrees are their own checkouts) or, only when
+// Git confirms there is no repository, the directory itself. Any other Git
+// result, including a timeout, is an error so a note is never keyed against
+// an unintended path.
+// Implementation: run Git with an argument array under LC_ALL=C and inspect
+// its status and stderr. Only the discovery failure "not a git repository
+// (or any ...)" falls back to cwd. `checkout` is the canonical on-disk
+// spelling (realpathSync.native); `legacy` is the spelling the previous
+// helper stored (fs.realpathSync), still used as the key of pointerless sessions.
+// Example: checkoutRoot("/repo/sub") -> { checkout: "/repo", legacy: "/repo" };
+// on a case-insensitive disk, checkoutRoot("/tmp/plain dir") outside Git ->
+// { checkout: "/private/tmp/Plain Dir", legacy: "/private/tmp/plain dir" }.
 function checkoutRoot(cwd) {
-  try {
-    const root = execFileSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
-      encoding: "utf8",
-      timeout: 2000,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).replace(/\n$/, ""); // Strip only Git's terminator to preserve trailing whitespace in the root.
-    if (root) return fs.realpathSync(root);
-  } catch {
-    // Not a Git checkout, or Git is unavailable.
+  const git = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    timeout: 2000,
+    env: { ...process.env, LC_ALL: "C" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let dir;
+  if (git.error) {
+    const why = git.error.code === "ETIMEDOUT" ? "timed out after 2 seconds" : git.error.message;
+    throw new Error(`Git could not resolve the checkout of ${cwd}: ${why}.`);
+  } else if (git.status === 0 && git.stdout.replace(/\n$/, "")) {
+    dir = git.stdout.replace(/\n$/, ""); // Strip only Git's terminator to preserve trailing whitespace in the root.
+  } else if (git.status === 128 && /^fatal: not a git repository \(or any /m.test(git.stderr)) {
+    dir = cwd;
+  } else {
+    const why = git.stderr.trim().split("\n")[0] || `exit status ${git.status ?? git.signal}`;
+    throw new Error(`Git could not resolve the checkout of ${cwd}: ${why}`);
   }
-  return fs.realpathSync(cwd);
+  return { checkout: fs.realpathSync.native(dir), legacy: fs.realpathSync(dir) };
 }
 
 function statePath(...parts) {
@@ -31,6 +51,64 @@ function statePath(...parts) {
 
 const notePath = (address, checkout, session) => statePath(address, checkout, session);
 const ownerPath = (address, checkout) => statePath("session", address, checkout);
+// Design: scope the active session and canonical checkout to one pane on one
+// Core. Existing live-note, saved-note, and owner keys retain their format.
+// Implementation: add the inherited HC_SESSION to the active key for named
+// cores. The default Core keeps the address-only active key.
+// Example: for t7, the default key hashes ["active","t7"] and the review Core
+// hashes ["active","review","t7"].
+const activePath = (address) => {
+  const core = process.env.HC_SESSION;
+  return core ? statePath("active", core, address) : statePath("active", address);
+};
+
+// Design: an absent pointer selects the legacy lookup. A present pointer must
+// be regular-file metadata with a nonempty session and an absolute checkout.
+// Implementation: open without following symlinks or blocking on a FIFO, then
+// check and read the same descriptor. The task-note size limit applies to notes.
+// Example: readActive("t7") returns { session: "s1", checkout: "/repo" } for
+// valid metadata, null for a missing file, and throws for an empty file.
+function readActive(address) {
+  const { O_RDONLY, O_NOFOLLOW, O_NONBLOCK } = fs.constants;
+  let fd;
+  try {
+    fd = fs.openSync(activePath(address), O_RDONLY | O_NOFOLLOW | O_NONBLOCK);
+    if (fs.fstatSync(fd).isFile()) {
+      const active = JSON.parse(fs.readFileSync(fd, "utf8"));
+      if (typeof active?.session === "string" && active.session &&
+          typeof active.checkout === "string" && isAbsolute(active.checkout)) {
+        return active;
+      }
+    }
+  } catch (error) {
+    if (fd === undefined && error.code === "ENOENT") return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+  throw new Error(`The active checkpoint record for ${address} is unreadable. Restart the session to rewrite it.`);
+}
+
+// Design: choose the checkout key for `address` from a directory. With an
+// active pointer the directory must resolve to the pointer's canonical
+// checkout, and a mismatch names the active checkout. A pointerless session
+// (started by the previous helper) keeps exactly the previous helper's key
+// spelling, so its owner, live note, and saved notes stay where they were and
+// save never accepts a session that load could not restore.
+// Implementation: callers open the state directory first. Returns the
+// checkout key, the pointer (or null), and the owner session ("" when none).
+// Example: with pointer {session:"s1", checkout:"/a"},
+// selectCheckout("t7", "/a/sub") -> { checkout: "/a", active, owner: "s1" };
+// selectCheckout("t7", "/b") throws "The active checkout for t7 is /a, not /b. ...".
+function selectCheckout(address, cwd) {
+  const { checkout, legacy } = checkoutRoot(cwd);
+  const active = readActive(address);
+  if (!active) return { checkout: legacy, active, owner: readNote(ownerPath(address, legacy)) };
+  if (active.checkout !== checkout) {
+    throw new Error(`The active checkout for ${address} is ${active.checkout}, not ${checkout}. ` +
+      `Run herdr-context from ${active.checkout}.`);
+  }
+  return { checkout, active, owner: readNote(ownerPath(address, checkout)) };
+}
 
 function openState(create) {
   if (create) {
@@ -65,13 +143,20 @@ function writeNote(path, text) {
   }
 }
 
+// Design: replace this pane's live note for its checkout. A record from a
+// directory outside the active checkout fails instead of writing a note that
+// compaction would never save.
+// Implementation: selectCheckout throws the mismatch before any write; the
+// note is written privately and atomically by writeNote.
+// Example: cd /repo && herdr-context record <<'EOF' ... EOF  (exit 0);
+// from /other while /repo is active: exit 1, "The active checkout for t7 is /repo, ...".
 function record() {
   const note = fs.readFileSync(0);
   if (note.length > maxNoteBytes || !note.toString("utf8").trim()) {
     throw new Error(`Send a nonempty task note of at most ${maxNoteBytes} bytes on stdin.`);
   }
   openState(true);
-  writeNote(notePath(pane, checkoutRoot(process.cwd())), note);
+  writeNote(notePath(pane, selectCheckout(pane, process.cwd()).checkout), note);
 }
 
 function hookEvent(name) {
@@ -90,13 +175,21 @@ function hookEvent(name) {
 }
 
 // PreCompact: save the note for this session, or block compaction without one.
+// Design: keep the CLI-specific block response and the hook session check,
+// and also require the hook's checkout and session to match the active
+// pointer when one exists. A checkout mismatch or Git failure blocks with
+// its own diagnosis instead of the missing-session advice.
+// Implementation: selectCheckout errors land in the catch below; the saved
+// note is written under the existing session-scoped key.
+// Example: herdr-context save codex <<< '{"hook_event_name":"PreCompact",...,"cwd":"/other"}'
+// prints {"continue":false,"stopReason":"The task checkpoint could not be saved: The active checkout ..."}.
 function save(driver) {
   let reason;
   try {
     const event = hookEvent("PreCompact");
     if (!event) return;
-    const checkout = checkoutRoot(event.cwd);
-    if (!openState(true) || readNote(ownerPath(pane, checkout)) !== event.session_id) {
+    const { checkout, active, owner } = openState(true) ? selectCheckout(pane, event.cwd) : {};
+    if (owner !== event.session_id || (active && active.session !== event.session_id)) {
       reason = "No checkpoint session for this pane. Enable the SessionStart hook and restart the session.";
     } else {
       const current = readNote(notePath(pane, checkout));
@@ -121,17 +214,27 @@ function readCheckpoint(checkout, session) {
 }
 
 // SessionStart: reset the live note for a new session, or prompt a tool read.
+// Design: a non-compaction start owns the pane for its launch checkout and
+// records the active pointer; a compaction start prompts only when the
+// pointer (if any), the owner, and the saved note all match this session.
+// Implementation: the owner is written before the pointer, so an interrupted
+// start leaves at most a pointerless (legacy) state or a stale pointer whose
+// mismatch is reported, never a silently wrong note.
+// Example: '{"hook_event_name":"SessionStart","session_id":"s1","cwd":"/repo","source":"startup"}'
+// writes owner(t7, /repo) = s1 and active(t7) = {"session":"s1","checkout":"/repo"}.
 function start() {
   const event = hookEvent("SessionStart");
   if (!event) return;
   openState(true);
-  const checkout = checkoutRoot(event.cwd);
   if (event.source !== "compact") {
+    const { checkout } = checkoutRoot(event.cwd);
     fs.rmSync(notePath(pane, checkout), { force: true });
     writeNote(ownerPath(pane, checkout), event.session_id);
+    writeNote(activePath(pane), JSON.stringify({ session: event.session_id, checkout }));
     return;
   }
-  if (readNote(ownerPath(pane, checkout)) !== event.session_id) return;
+  const { checkout, active, owner } = selectCheckout(pane, event.cwd);
+  if (owner !== event.session_id || (active && active.session !== event.session_id)) return;
   if (!readCheckpoint(checkout, event.session_id)) return;
   console.log(JSON.stringify({
     hookSpecificOutput: {
@@ -142,9 +245,20 @@ function start() {
   }));
 }
 
+// Design: restore the saved note for the pane's current session. With an
+// active pointer, the directory must be the active checkout and the owner
+// must be the active session; pointerless sessions keep the previous lookup.
+// Implementation: a checkout mismatch throws from selectCheckout; an owner
+// that disagrees with the pointer yields no session and the usual error.
+// Example: cd /repo && herdr-context load  ->  "Task checkpoint data:\n<note>".
 function load() {
-  const checkout = checkoutRoot(process.cwd());
-  const session = openState(false) ? readNote(ownerPath(pane, checkout)) : "";
+  let session = "";
+  let checkout = "";
+  if (openState(false)) {
+    const selected = selectCheckout(pane, process.cwd());
+    checkout = selected.checkout;
+    if (!selected.active || selected.active.session === selected.owner) session = selected.owner;
+  }
   const saved = readCheckpoint(checkout, session);
   if (!saved) throw new Error("No saved task checkpoint matches this session and checkout.");
   console.log("Task checkpoint data:\n" + saved);
@@ -177,13 +291,32 @@ function compactPeer(selector) {
     throw new Error("The target must be another idle agent in this Herdr space.");
   }
 
-  const cwd = target.foreground?.cwd || target.cwd;
-  const checkout = cwd && openState(false) ? checkoutRoot(cwd) : "";
-  if (!checkout || !readNote(notePath(target.address, checkout))) {
+  // Design: notes live on this machine. Refuse a remote peer or one whose
+  // foreground checkout is unknown or inaccessible before looking up notes.
+  // Current-session proof stays the operator check in HERDR.md.
+  // Implementation: a qualified address ("machine/t7") is remote; the
+  // observed foreground cwd must be readable and searchable here.
+  // Example: herdr-context compact t3 with no foreground cwd reports
+  // "The foreground checkout of t3 is unavailable" and sends no keys.
+  if (String(target.address).includes("/")) {
+    throw new Error(`The target ${target.address} runs on another machine. Run herdr-context compact on that machine.`);
+  }
+  const cwd = target.foreground?.cwd;
+  if (!cwd) {
+    throw new Error(`The foreground checkout of ${target.address} is unavailable. Herdr did not report its working directory.`);
+  }
+  try {
+    fs.accessSync(cwd, fs.constants.R_OK | fs.constants.X_OK);
+  } catch (error) {
+    throw new Error(`The checkout ${cwd} of ${target.address} is unavailable on this machine` +
+      (error.code ? ` (${error.code}).` : "."));
+  }
+  const selected = openState(false) ? selectCheckout(target.address, cwd) : null;
+  if (!selected || !readNote(notePath(target.address, selected.checkout))) {
     throw new Error("The target must record a task note before compaction.");
   }
   // Without the owner that SessionStart writes, the target's PreCompact hook blocks.
-  if (!readNote(ownerPath(target.address, checkout))) {
+  if (!selected.owner) {
     throw new Error("The target has no checkpoint session. Enable its SessionStart hook and restart it.");
   }
 

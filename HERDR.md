@@ -21,14 +21,19 @@ herdr-app --skill
 
 Open the target project's Herdr space, focus the pane you will use, and set
 its working directory to the project's checkout. Keep this directory for
-agent launches and task work. The guide can come from a separate checkout
-or the [canonical GitHub copy](https://github.com/chindada/herdr/blob/main/HERDR.md).
+agent launches and task work. Use the supplied guide path or URL if readable.
+Then try a readable guide in the target or a known separate checkout, followed
+by the [canonical GitHub copy](https://github.com/chindada/herdr/blob/main/HERDR.md).
+Give each member a reference readable on its machine. Report a blocker if a
+required member has no readable reference.
 
 The optional profile guides and the environment and checkpoint helper
-scripts live in the Herdr source repository. Resolve profile guide links
-relative to that source. If you use the scripts, set `herdr_source` to the
-absolute path of its checkout on the machine running them. Export only the
-credentials the agent needs, following the
+scripts live in the Herdr source repository. Resolve profile links relative
+to that source or the guide URL. Resolve scripts independently of the guide
+and target. For scripts you use, set `herdr_source` to the verified absolute
+source checkout path on the machine running them. A URL-only guide works with
+installed tools. Report missing checkpoint support for work that requires it.
+Export only the credentials the agent needs, following the
 [Claude Code guide](claude/README.md#4-mcp-credentials) or
 [Codex guide](codex/README.md#mcp-credentials) if needed.
 
@@ -74,16 +79,20 @@ CLAUDE_CONFIG_DIR="$HOME/.claude" "$HOME/.local/bin/claude"
 
 ## Launch rules
 
-A terminal started with `hc run` gets the Herdr core's environment. It does
-not get the variables you exported in the terminal that started it. When an
-agent needs MCP credentials, start a shell in the new terminal by running
-`hc run` without a command. A person enters the credentials in that shell,
-then launches the agent from it. Reuse the prepared pane for later tasks
-that need the same role and access.
+A terminal started with `hc run` gets the Herdr Core's program environment
+and explicit child overrides. Set variables in the child launch environment.
+When an agent needs MCP credentials, start a shell with `hc run --bg` and no
+command. A person enters the credentials there and launches the agent from
+that shell. Reuse the prepared pane for tasks that need the same role and
+access. [Herdr Core launch source](https://github.com/herdrdev/herdr-core/blob/master/crates/herdr-core/src/api/run.rs)
 
-`hc run` starts executables, not shell aliases, and the core's `PATH` can
-differ from your shell's. Launch through a login shell you have verified, or
-give the full path of the executable and its configuration directory.
+`hc run` starts executables, and the core's `PATH` can differ from your shell's.
+An absolute agent executable path resolves the agent itself. Probe required
+subprocesses on the actual core route and in any launch wrapper and profile.
+For example, compare `command -v dart` in the login shell with
+`hc exec -- /bin/sh -c 'command -v dart'` on the verified core. When a path is
+missing, use a verified login shell or explicit executable directories in the
+child environment. An unavailable optional tool only blocks work that needs it.
 
 ```zsh
 hc run --bg --cwd "$PWD" -- \
@@ -93,6 +102,11 @@ hc run --bg --cwd "$PWD" -- \
 Use this team launch mode when the user authorizes its flags. Otherwise use
 the approval-based alternative, which keeps the configured permission mode.
 Keep the running lead when provisioning members from its starter prompt.
+
+For opted-in Claude telemetry, set `HERDR_STATUSLINE_LABELS=1` in the child
+shell or pass it as an explicit nonsecret `env` argument to `hc run`. See
+[Claude status line setup](claude/README.md#status-line) for label precedence
+and quota reporting.
 
 Keep credential values in the environment only. Never put them in command
 arguments, `hc send` text, labels, files, or reports. Refer to a credential by
@@ -136,10 +150,12 @@ and check that the lead belongs to it. If the selected space and the lead's
 space differ, resolve which one the user intends before launching there.
 Keep the resolved machine, space, and target checkout when focus changes.
 
-Run `herdr-app status`, `herdr-app ls`, layout commands, and screenshots
-on the machine hosting the visible Herdr window. If the lead is headless,
-use an authorized operator on that desktop. If desktop operations are
-unavailable, report visibility as pending.
+Check `hc` and `herdr-app` on the desktop with
+`command -v hc && command -v herdr-app`.
+Run `herdr-app status`, `herdr-app ls`, layout commands, and screenshots on
+the machine hosting the visible Herdr window. If the lead is headless, use an
+authorized operator on that desktop. If desktop operations are unavailable,
+report visibility as pending.
 
 ```zsh
 lead="$HC_TERMINAL_ID"
@@ -166,7 +182,8 @@ Record these values:
 
 The requested roster authorizes its listed roles and commands. Either CLI
 can be a coder or reviewer. The roster and per-turn assignment determine
-the role.
+the role. When no roster is authorized, propose the smallest suitable set
+of roles and wait for the user's launch authorization.
 
 Inspect `hc ls` and verify candidates with `hc get`. Reuse an authorized
 live member whose role, running CLI conversation, parent, current directory,
@@ -198,9 +215,10 @@ change leaves the launch alias and its rules in place.
 
 Limit permissions to the team names and commands the role needs. Place
 `--` before the literal name or authorized address in a permitted command.
-Before sending input, verify that the name resolves to the roster address
-in the expected space and working directory. A reviewer can print READY
-and the verdict in its pane for the lead to read.
+For a member's return path, verify two literal lookups, one for the member
+and one for the lead, and a separate send to the lead. Check both returned
+addresses against the roster in the expected space and working directory.
+A reviewer can print READY and the verdict in its pane for the lead to read.
 
 ### Add a member
 
@@ -264,17 +282,20 @@ Those permission settings apply to their own mode. A launch that bypasses
 approvals still follows the assigned scope. If managed policy, tool
 permissions, or a startup decision blocks the requested launch, report it.
 
-Claude Code can ask once per configuration directory to acknowledge
-`--dangerously-skip-permissions`. When `hc read --lines 0` shows that
-native dialog, tell the user which member shows it and leave the answer
-to them. Do not send keys to the dialog. After the user clears it, check
-that the member received its onboarding before resending.
-
 Record the returned terminal address, then verify live state,
 `foreground.argv`, `foreground.cwd`, parent, and space with `hc get`.
 Check the member's space label for a visible launch. Set `member` to the
 verified address for layout commands. After an ambiguous launch failure,
 inspect existing terminals before retrying.
+
+Codex Folder access and Claude Code's bypass-mode acknowledgment are user
+decisions even under bypass flags. A live terminal can report null agent
+status while its first prompt is still unprocessed. If status is null or
+unexpected, run `hc read --lines 0 -- "$member"` before resending or assigning
+work. Report the member and dialog, preserve the session, and leave the
+dialog keys to the user. After the user clears it, check whether the initial
+prompt was delivered. If it was missed, use the idle-composer onboarding
+steps below before dispatching work.
 
 For a member that needs MCP credentials, start a shell instead. Give it a
 pane as described in [Show the team](#show-the-team), so a person can enter
@@ -403,6 +424,8 @@ This step is setup only. Leave the checkout and layout as they are.
    target project. Name the references you actually read.
 2. Use pwd -P and hc get -- "$HC_TERMINAL_ID" to verify your live address,
    parent, space and foreground working directory. Verify the lead's address.
+   If the profile requires literal selectors, use the approved self and lead
+   lookups and verify both addresses against the roster.
 3. Reply with READY and the terminal=, role=, space= and cwd= fields.
    Include the verified parent and rules read. Use hc send -- <lead-address>
    "<reply>" when authorized, using a verified alias if required. Otherwise,
@@ -456,8 +479,9 @@ hc read --lines 0 -- "$member"
 Inspect the wait reason and current state. With `reason: message`, read the
 incoming message. With `reason: timeout`, check progress before waiting
 again. A live terminal can finish a turn and stay available. A terminal
-exit ends the program and may leave the assignment unfinished. Read the
-actual handback or blocker before advancing the task.
+exit ends the program and may leave the assignment unfinished. Before
+advancing or dispatching again, match the actual handback or blocker to the
+outstanding assignment and its candidate digest.
 
 Keep idle members productive. At each dispatch, handback, or dependency
 stall, check which members are available. Proactively give suitable idle
@@ -467,6 +491,56 @@ next step. Give each member one bounded active unit at a time, reserve
 reviewer capacity for upcoming candidates, and keep a single editor for
 each shared checkout or resource. When nothing useful can advance within
 scope, or the user has paused the work, let the member stand by.
+
+### Specify and plan work
+
+A tiny change has an obvious outcome, a confined edit, and a direct check.
+Record its scope and check and use the normal implementation review. Use the
+full sequence for changed behavior, design decisions, dependencies across
+repositories, or work for which the user requests it. If a tiny change grows,
+review the expanded specification before continuing.
+
+1. Write a specification with the outcome, requirements, constraints, and
+   testable acceptance criteria. Save it in `docs/superpowers/specs/` using
+   a four-digit sequence and a meaningful slug, such as `0001-team-workflow.md`.
+   Start at `0001`, then use the next unused sequence in the target directory.
+   Omit dates from specification names.
+2. After specification review, use `superpowers:writing-plans` to draft the
+   plan. Use a small number of small, independently verifiable tasks. State
+   dependencies, allowed paths, expected outcomes, checks, and safe parallel
+   work. Save local plans under `docs/superpowers/plans/` with the existing
+   date-and-slug naming. Add an authorized scoped ignore rule if needed.
+   Use `git check-ignore -v -- "$plan"` and `git ls-files -- "$plan"` to confirm
+   the actual plan is ignored and untracked while specifications stay visible.
+   Bring conflicts with the target's tracking policy to the lead.
+3. After plan review, use `superpowers:executing-plans` in the assigned coder
+   sessions. Run independent tasks concurrently when their work is read-only
+   or uses separate authorized writable workspaces. Keep one editor per shared
+   checkout and run the implementation [review and repair](#review-and-repair).
+
+Freeze the specification and the plan separately for independent review by
+someone who did not author the document. Use the single-editor handoff below
+for repairs. Have the author re-review the current snapshot even after a clean
+first review, then have the reviewer confirm it. Refreeze any edit and repeat
+the author and reviewer checks in that order. Advance when required checks pass
+and both confirm the same digest, with no actionable reviewer findings. Send
+changed requirements back through specification review and re-review any
+affected plan.
+
+While writing a specification, consult Context7 for applicable platform and
+library best practices. Cite the relevant primary sources and reconcile them
+with the installed versions. Compare viable approaches, explain the tradeoffs,
+and recommend the approach that fits the project. In touched code, add comments
+on each new or changed structure and method describing its design,
+implementation, and an example.
+
+### Writes in another repository
+
+Before assigning writes in another repository, tell the user which repository
+and work need access, how many new Session teammates are needed, and their roles.
+Wait for the user to create them. Verify the new teammates' target checkout,
+rules, roles, and READY reports before dispatching those writes. Continue
+authorized local work that does not depend on the other repository.
 
 ### Review and repair
 
@@ -482,11 +556,12 @@ changes files in the checkout, and each handoff ends the editor's turn.
 2. The lead freezes the candidate and hands it to the reviewer. The
    reviewer checks the whole change and directly fixes confirmed issues
    within the assignment in the task checkout. Before editing, compare only
-   the assigned candidate paths in the checkout against the archive.
-   Verify that the paths, contents, and executable bits match. If anything
-   differs, stop and report it to the lead. After a fix, run the relevant
-   checks, report the input snapshot's SHA-256, and hand back the changed
-   checkout so the lead can freeze the output under a new SHA-256.
+   the assigned paths in the checkout against the archive's `payload/`.
+   Verify that the paths, contents, and executable bits match and that intended
+   deletions are absent. If anything differs, stop and report it to the lead.
+   After a fix, run the relevant checks, report the input snapshot's SHA-256,
+   and hand back the checkout so the lead can freeze the output under a new
+   SHA-256.
 3. The coder re-reviews the reviewer's fixes on the new snapshot. Check
    that each issue is resolved and that the repair introduces no regression.
    Report any remaining or new issues to the lead so the reviewer can
@@ -504,15 +579,19 @@ changes files in the checkout, and each handoff ends the editor's turn.
 
 For each handoff after edits, the lead archives the exact candidate files
 at the location agreed in [Run an assignment](#run-an-assignment).
-Keep relative paths and executable modes, include intended new files,
-and exclude credentials and other local state.
-Record intended deletions with the candidate, including old rename paths.
+Include a top-level `metadata.json` with `base`, the expected base commit ID,
+and `deletions`, an array of relative tracked paths to remove. Include the old
+tracked path of a rename. Put the exact files under `payload/`, with relative
+paths and executable modes. Include intended new files and exclude credentials
+and local state. Hash the entire archive so the digest binds the base and
+deletions together with the payload.
+
 Verify the archive digest and extract it to a new directory. Remove write
 permission with `chmod -R a-w "$candidate_dir"`, where `candidate_dir`
 is the absolute path to the extracted tree. Give each participant the
-archive, its digest, the extracted path, and the deletion list. Verify the
-digest before and after inspection. Run checks that need to write in an
-authorized location outside the frozen copy.
+archive, its digest, and the extracted path. Use the deletion list from its
+verified metadata. Verify the digest before and after inspection. Run checks
+that need to write in an authorized location outside the frozen copy.
 
 Compute the digest like this, where `candidate_archive` is the absolute path
 of the finished archive.
@@ -535,10 +614,20 @@ each change needs two independent reviews by reviewers who did not write
 that change. Both reviews must apply to the same final snapshot and cite
 its digest.
 
-Verify the candidate's contents and file modes. Use a temporary Git index
-based on the expected tip. Remove the candidate's recorded deletion paths
-from that index before adding the frozen candidate files. Record the
-resulting tree as `reviewed_tree` and compare it with the staged changes.
+Verify the archive digest and confirm `metadata.json`'s `base` matches the
+expected branch tip. In a temporary Git index, use `git read-tree` to load
+that base, apply the declared deletions, and add the exact `payload/` paths
+with their reviewed contents and modes. Keep archive metadata separate from
+the integration tree. Record the result of `git write-tree` as `reviewed_tree`.
+[Git user manual](https://github.com/git/htmldocs/blob/gh-pages/user-manual.adoc)
+
+Run the target's required checks before invoking CodeGPT. CodeGPT v1.8.0 uses
+`--no-verify`, which skips the pre-commit and commit-msg hooks. Bring any
+incompatible target commit policy to the lead before proceeding.
+[CodeGPT v1.8.0 source](https://github.com/appleboy/CodeGPT/blob/v1.8.0/git/git.go#L134)
+
+Return to the checkout's normal index and compare the staged tree with the
+reviewed tree before committing.
 
 ```zsh
 test "$(git write-tree)" = "$reviewed_tree" &&
@@ -546,8 +635,9 @@ test "$(git write-tree)" = "$reviewed_tree" &&
 ```
 
 After the command, verify that the target branch points to the new commit,
-its parent and tree match the approved integration, and the working tree
-has the expected state. A push requires its own authorization.
+its parent is `base`, its tree is `reviewed_tree`, and intended deletions
+are absent. Check that the working tree has the expected state. A push
+requires its own authorization.
 
 ### Reports and stalled work
 
@@ -575,10 +665,15 @@ hc send -- "$lead" \
   '快照 SHA-256 <sha256>。修正：無。Markdown 檢查通過，無待修問題。報告 /path/to/report.md。'
 ```
 
-Read the screen when a member is blocked. Continue independent work or
-use an available authorized path if the blocked step is optional. Ask the
-user when a permission decision or other consequential choice is required.
-Leave the permission prompt for the user to answer.
+Read the screen when status is blocked, null, or unexpected. Preserve the
+member's session and bring genuine startup trust dialogs or other decisions to
+the user. Leave each prompt for the user unless they authorize a response.
+
+Use small, non-destructive checks in fresh scratch you control. Run useful
+checks separately from cleanup and leave scratch in place when it can wait.
+If an avoidable command such as bundled cleanup prompts or is declined, honor
+the decision and try a permitted way to run the useful check. Continue independent
+work and report a blocker when no permitted path remains.
 
 ### Context checkpoints
 
@@ -592,10 +687,14 @@ install -m 0755 "$herdr_source/scripts/herdr-context.cjs" "$HOME/.local/bin/herd
 
 Enable the hooks in the [Codex guide](codex/README.md#context-checkpoints)
 and the [Claude Code guide](claude/README.md#3-configuration) for each
-configuration that launches team panes. Use one hook representation per
-Codex user configuration. If Codex already started with an untrusted
-`SessionStart` hook, trust both hooks in `/hooks` and start a fresh Codex
-session before recording the task note and compacting.
+configuration that launches team panes. Claude Code 2.1.295 or later is
+required for the `PreCompact` handler's `onFailure: "block"` setting.
+[Claude Code hooks reference](https://code.claude.com/docs/en/hooks)
+
+The shipped `SessionStart` commands call the helper only in Herdr panes. Use
+one hook representation per Codex user configuration. If Codex already started
+with an untrusted `SessionStart` hook, trust both hooks in `/hooks` and start a
+fresh Codex session before recording the task note and compacting.
 
 Start each agent CLI in its assigned checkout. At startup, its
 `SessionStart` hook initializes checkpoint ownership for that checkout and
@@ -617,11 +716,18 @@ Next: Compare the checkout to the archive before making repairs.
 EOF
 ```
 
-Write task facts and omit credentials, transcripts, and raw tool output.
-The helper replaces the previous note for that pane and checkout. The
-checkout is the Git root, or the real directory outside Git, so its
-subdirectories share one note. Notes stay in a private per-user directory
-under `/tmp`, outside the checkout.
+Write task facts in at most 2,048 bytes and link to longer reports. Omit
+credentials, transcripts, and raw tool output. The helper replaces the note
+for that pane and checkout. Git subdirectories share the canonical checkout
+root. Submodules and worktrees each have their own root. A directory outside
+Git uses its canonical directory path. Git errors, including timeouts, need
+diagnosis before using the checkpoint. Notes live in a private per-user
+directory outside the checkout. [Node subprocess API](https://github.com/nodejs/node/blob/main/doc/api/child_process.md)
+
+Record, save, and load in the session's assigned checkout. If a current
+session reports a checkout mismatch, return to the checkout in the diagnostic.
+A session initialized by an older helper keeps its per-checkout lookup until
+the updated helper initializes a session.
 
 Each new, resumed, cleared, or forked session starts without a note, so
 record one in that session before compacting. `PreCompact` saves the note
@@ -633,9 +739,9 @@ compaction, `SessionStart` prompts the agent to run `herdr-context load`
 in the same checkout. Load the saved task data and verify it against the
 latest assignment and candidate before recording a replacement note.
 
-Run one interactive agent per Herdr pane. For a nested Codex or Claude Code
-smoke test, prefix the CLI executable with `env -u HC_TERMINAL_ID` so its
-startup hooks leave the parent pane's task note alone.
+Run one interactive agent per Herdr pane. Prefix every nested Codex or Claude
+Code invocation, including noninteractive commands, with
+`env -u HC_TERMINAL_ID` so the parent session keeps its checkpoint state.
 
 Choose to compact at a useful stopping point while there is still room
 to record the note. Update the note, request compaction from a teammate,
@@ -643,18 +749,27 @@ and end the current turn. The lead can ask a teammate to do the same for
 its own pane. Pause routine sends to the target until it is ready again.
 The teammate verifies the request and the target's space and address, then
 waits for the turn to end and reads the screen. Set `peer` to that verified
-address or required alias. Both panes must be in the same space. A pane's
-own `herdr.space` label sets its space. A hidden member without that label
-uses the label of its live parent. The helper refuses a target in another
-space or with no space.
+address or required alias. Both panes must be in the same space and on the
+same machine with the target checkout accessible locally. A pane's own
+`herdr.space` label sets its space. A hidden member without that label uses
+the label of its live parent. Report a remote peer or inaccessible foreground
+checkout and use a teammate on the target's machine when available.
+
+Verify the target's trusted hooks, observed initialization in the current
+session, and a fresh note for that session. Helper fixtures showed that a
+nested start can reset ownership and that a stale owner and note can pass
+the helper's preliminary checks. Use current-session evidence before sending
+keys.
 
 ```zsh
 hc wait --timeout 45 -- "$peer"
+hc get -- "$peer"
 hc read --lines 0 -- "$peer"
 ```
 
-Look at that screen right away. Continue only if the composer is empty
-and the pane shows no dialog or draft. Then invoke the helper on its own.
+Check the status and screen right away. Continue when the peer is idle or
+done, its composer is empty, and the pane shows no dialog or draft. Then
+invoke the helper on its own.
 
 ```zsh
 herdr-context compact "$peer"
@@ -709,9 +824,11 @@ Act as the lead for this Herdr space.
 Guide reference: <readable path or URL, if supplied>.
 Target checkout: <absolute path, or resolve from this pane>.
 Read the supplied guide first. If unavailable, use a readable local
-copy of this guide when present, then fall back to the canonical copy:
+copy in the target checkout or a known separate source checkout, then use
+the canonical copy below.
 https://github.com/chindada/herdr/blob/main/HERDR.md
-Read any applicable rules present in the target project.
+Resolve optional source scripts separately. Read the target project's
+applicable rules and keep its verified checkout for assignments.
 
 Read the installed hc and herdr-app manuals. Use this terminal as the lead.
 Verify the target working directory, lead address, and selected machine
@@ -727,6 +844,14 @@ Reuse matching live authorized members and launch only missing members as
 interactive children. Use actual addresses as names. Omit new aliases
 unless narrow permission rules need them. Record the verified roster and
 preserve existing sessions when reporting permission or launch mismatches.
+If no roster is authorized, propose the smallest suitable set of roles and
+wait for launch authorization. Use hc run --bg for prepared shells.
+
+Before resending or assigning work to a live member with null or unexpected
+status, read its screen with hc read --lines 0. Report startup trust or
+bypass acknowledgment dialogs and let the user clear them. Verify initial
+delivery afterward. Separate useful checks from avoidable scratch cleanup
+and continue through a permitted alternative if cleanup is declined.
 
 Give each member the guide reference and verify its READY reply with
 terminal=, role=, space= and cwd=. Pin the members and show the team in one
@@ -736,10 +861,12 @@ member panes. Follow any layout I request and adapt to other roster sizes.
 Set native titles to actual addresses and verify independent Pixel HQ
 visibility with a screenshot. Report the roster, readiness, and any blockers.
 
-If I supply a task, start it once its assigned members are READY and
-follow Run an assignment and Review and repair. Use Commit reviewed
-changes when I authorize a commit. Otherwise verify setup only and keep
-the team interactive.
+If I supply a task, start it once its assigned members are READY. Follow
+Specify and plan work and Review and repair. For writes in another repository,
+report how many new Session teammates are needed and their roles, then wait
+for me to create them and verify their readiness before assigning those writes.
+Use Commit reviewed changes when I authorize a commit. When I supply only this
+setup prompt, verify setup and keep the team interactive for later assignments.
 
 Use English for agent instructions, reports, checkpoints and repo prose.
 Use Taiwan Traditional Chinese for human-facing text and short hc status

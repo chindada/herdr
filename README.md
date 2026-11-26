@@ -19,21 +19,23 @@ teammates in the same space to carry a user's request through delivery.
    ```
 
 2. Install any missing [shared prerequisites](#prerequisites). Open a zsh
-   pane in Herdr and change to the repository root.
+   pane in Herdr and change to the Herdr source checkout for template setup.
 3. Follow the setup guide for one or both tools to install, configure, and
    sign in. Export the MCP credentials you need in the pane that will run the
    tool. Each terminal started by `hc run` has its own environment.
    Install the [context checkpoint helper](HERDR.md#context-checkpoints)
    and enable its hooks for each CLI on the team.
-4. Run the [environment check](#environment-check), then
-   [launch from the same pane](HERDR.md#quick-start) and verify any MCP
-   connections you need.
+4. In the launch pane, change to the target checkout and set `herdr_source`
+   to the verified absolute path of the source checkout. Run the
+   [environment check](#environment-check), then
+   [launch from the same pane](HERDR.md#quick-start) and verify the required
+   MCP connections.
 5. Paste the starter prompt into the running lead's pane. Edit the roster
    to authorize the roles and launch commands you want. The lead reuses
    compatible live members, creates missing members, and verifies READY
    and the requested layout. Paste it on its own to set up the team and
-   leave it on standby, or append a task for the
-   [review and repair cycle](HERDR.md#review-and-repair).
+   leave it on standby, or append a task and follow
+   [Specify and plan work](HERDR.md#specify-and-plan-work).
 
 ## Prerequisites
 
@@ -102,25 +104,25 @@ curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 ```
 
 Open Herdr and start a zsh terminal. Confirm the tools are on its `PATH` and
-`hc ls` lists your terminals. Change to the repository root before running
-either guide.
+`hc ls` lists your terminals. Run the launch checks from the target pane.
 
 ```zsh
-command -v brew git node npm npx uv hc
+command -v brew git node npm npx uv hc herdr-app
 hc ls
 ```
 
 ## Environment check
 
-From the Herdr pane where you will launch the tool, run the command for
-your configuration. Use the second Codex example if you installed the work
-profile.
+From the target checkout in the Herdr pane where you will launch the tool,
+use the verified absolute `herdr_source` path and run the command for your
+actual profile. Confirm the subprocess environment if launching through a
+different shell or wrapper. [Herdr launch rules](HERDR.md#launch-rules)
 
 ```zsh
-scripts/check-env.zsh codex
-scripts/check-env.zsh codex --profile work
-scripts/check-env.zsh claude
-scripts/check-env.zsh claude-k
+"$herdr_source/scripts/check-env.zsh" codex
+"$herdr_source/scripts/check-env.zsh" codex --profile work
+"$herdr_source/scripts/check-env.zsh" claude
+"$herdr_source/scripts/check-env.zsh" claude-k
 ```
 
 After the check passes, launch the tool in that pane and use `/mcp` to check

@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/herdr-context\" start",
+            "command": "if [ -n \"${HC_TERMINAL_ID:-}\" ]; then \"$HOME/.local/bin/herdr-context\" start; fi",
             "timeout": 5,
             "statusMessage": "Checking task checkpoint"
           }

@@ -22,6 +22,10 @@ In a Herdr team, members bring questions and blockers to the lead. The lead
 uses the authorization already given, continues independent work, and brings
 the user decisions only they can make.
 
+Follow [Specify and plan work](HERDR.md#specify-and-plan-work) for numbered
+specifications, Context7 research, code-comment requirements, and the review
+gates before implementation.
+
 The assigned reviewer fixes confirmed issues within scope. The coder
 re-reviews those fixes, then the reviewer checks the candidate again. The
 lead assigns one editor at a time and repeats the
