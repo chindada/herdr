@@ -392,13 +392,34 @@ input. Send the literal command keys and one Enter only at that safe
 boundary. Verify the native title and report any title change the
 running CLI cannot support.
 
+During initial setup and whenever a pane is reused or replaced, map the
+lead and all members to pane IDs in `herdr-app ls`. Set each Pixel HQ pane
+header name to its verified terminal address and its role chip to the
+current roster role (`Lead`, `Coder`, or `Reviewer` for the standard roster).
+Where the header editors are available, click the name and the role chip
+separately and press Enter after each edit.
+
+For CLI-driven setup, check the installed app guide named by
+`herdr-app --skill` and the shipped `mods/company-pane/main.js` for the
+current contract. A temporary personal overlay opened with `mod.open` can
+apply it. Where the header uses `pixel-hq.names`, read `pixel-hq-names.json`
+under `appHome()` with `readTextFile`. Parse that exact snapshot, treating a
+missing file as an empty map. Merge live-only pane entries from `shared`
+into the persisted map, keeping persisted entries for existing pane IDs.
+Apply `{name, role}` updates only to verified target pane IDs. Pass the
+original raw snapshot as `expected` to `writeTextFile`. On a stale-snapshot
+rejection, re-read and rebuild the merge before retrying. Publish with
+`setShared` only after the write succeeds. Report a blocker if the installed
+desktop cannot set the labels.
+
 Check `herdr-app status` for layout errors and compare the roster against
 the terminal and pane pairs in `herdr-app ls`. For requested Pixel HQ
 visibility, choose a unique `team_shot` path outside the checkout. Take
-and open a fresh screenshot. Confirm that the lead and every member have
-a recognizable name and icon independently visible in the team panel,
-and that all split panes are visible together in the shared tab. Report
-any visibility blocker with the affected terminals.
+and open a fresh screenshot. Verify each pane header name and role chip
+against the roster. Independently confirm that the lead and every member
+have a recognizable name and icon in the team panel and that all split
+panes are visible together in the shared tab. Report any header or visibility
+blocker with the affected terminals.
 
 ```zsh
 herdr-app status
@@ -837,8 +858,13 @@ and space from live state. Use the target checkout for assignments.
 Authorized roster and launch commands:
 - Codex coder: codex --yolo --no-daemon
 - Codex reviewer: codex --yolo --no-daemon
-- Claude coder: claude --dangerously-skip-permissions
-- Claude reviewer: claude --dangerously-skip-permissions
+- Claude coder: env HERDR_STATUSLINE_LABELS=1 claude --dangerously-skip-permissions
+- Claude reviewer: env HERDR_STATUSLINE_LABELS=1 claude --dangerously-skip-permissions
+
+Keep `env HERDR_STATUSLINE_LABELS=1` and the permission flag after `--` in
+each Claude `hc run` argv to scope the opt-in to that child launch. `env`
+bypasses shell aliases, so add the selected profile's `CLAUDE_CONFIG_DIR`
+to that `env` and use a verified `claude` path, as in Add a member.
 
 Reuse matching live authorized members and launch only missing members as
 interactive children. Use actual addresses as names. Omit new aliases
@@ -846,6 +872,15 @@ unless narrow permission rules need them. Record the verified roster and
 preserve existing sessions when reporting permission or launch mismatches.
 If no roster is authorized, propose the smallest suitable set of roles and
 wait for launch authorization. Use hc run --bg for prepared shells.
+
+Before launching Codex with a profile that uses Dart/Flutter, check that
+`dart` resolves on the verified Herdr Core launch route and in the effective
+launch wrapper and profile. For a plain local Core PATH probe, use
+`hc exec -- /bin/sh -c 'command -v dart'`. For a remote launch, use
+`hc exec --on <machine>` on the same verified machine as `hc run`.
+If `dart` is missing from the launch PATH, follow Launch rules to use a
+verified login shell or explicit executable directories in the child
+environment, then repeat the check in that environment.
 
 Before resending or assigning work to a live member with null or unexpected
 status, read its screen with hc read --lines 0. Report startup trust or
@@ -858,8 +893,12 @@ terminal=, role=, space= and cwd=. Pin the members and show the team in one
 shared tab with distinct split panes. For the standard four-member roster,
 use one large, full-height lead pane alongside a 2 by 2 grid of four equal
 member panes. Follow any layout I request and adapt to other roster sizes.
-Set native titles to actual addresses and verify independent Pixel HQ
-visibility with a screenshot. Report the roster, readiness, and any blockers.
+On initial setup and when reusing or replacing panes, follow Show the team
+to set each Pixel HQ pane header name to the verified terminal address and
+its role chip to the current roster role, including for the lead. Set native
+conversation titles to actual addresses. In a fresh screenshot, verify the
+header names and roles and the independently visible Pixel HQ team entries.
+Report the roster, readiness, and any blockers.
 
 If I supply a task, start it once its assigned members are READY. Follow
 Specify and plan work and Review and repair. For writes in another repository,
