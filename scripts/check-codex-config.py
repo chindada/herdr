@@ -10,17 +10,32 @@ except ImportError:
     raise SystemExit(3)
 
 
-def local_mcp_variables(config_path):
-    with open(config_path, "rb") as config_file:
-        servers = tomllib.load(config_file).get("mcp_servers", {})
+def overlay_tables(base, higher_priority):
+    """Merge nested TOML tables, replacing other values with the newer entry."""
+    for key, value in higher_priority.items():
+        if isinstance(base.get(key), dict) and isinstance(value, dict):
+            overlay_tables(base[key], value)
+        else:
+            base[key] = value
+
+
+def local_mcp_variables(config_paths):
+    config = {}
+    for config_path in config_paths:
+        with open(config_path, "rb") as config_file:
+            overlay_tables(config, tomllib.load(config_file))
 
     names = set()
-    for server in servers.values():
+    for server in config.get("mcp_servers", {}).values():
         transport = [server[key] for key in ("command", "url") if key in server]
         if len(transport) != 1:
             raise ValueError("Expected exactly one of command or URL")
         if not isinstance(transport[0], str):
             raise TypeError("Expected a command or URL string")
+        if "command" in server:
+            args = server.get("args", [])
+            if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+                raise TypeError("Expected an args array of strings")
         enabled = server.get("enabled", True)
         if not isinstance(enabled, bool):
             raise TypeError("Expected a boolean enabled flag")
@@ -29,9 +44,10 @@ def local_mcp_variables(config_path):
         env_vars = server.get("env_vars", [])
         if not isinstance(env_vars, list):
             raise TypeError("Expected an env_vars array")
+        forwarded_names = set()
         for entry in env_vars:
             if isinstance(entry, str):
-                names.add(entry)
+                forwarded_names.add(entry)
                 continue
             if not isinstance(entry, dict):
                 raise TypeError("Expected an environment variable name or table")
@@ -41,7 +57,8 @@ def local_mcp_variables(config_path):
             if source not in ("local", "remote"):
                 raise ValueError("Invalid environment variable source")
             if source == "local":
-                names.add(entry["name"])
+                forwarded_names.add(entry["name"])
+        names.update(forwarded_names - server.get("env", {}).keys())
         names.update(server.get("env_http_headers", {}).values())
         if "bearer_token_env_var" in server:
             names.add(server["bearer_token_env_var"])
@@ -53,7 +70,7 @@ def local_mcp_variables(config_path):
 
 if __name__ == "__main__":
     try:
-        variable_names = local_mcp_variables(sys.argv[1])
+        variable_names = local_mcp_variables([sys.argv[1], *sys.argv[2:]])
     except (AttributeError, IndexError, KeyError, OSError, TypeError, ValueError):
         raise SystemExit(1)
     for name in variable_names:

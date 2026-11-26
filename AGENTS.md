@@ -8,14 +8,35 @@ tasks, use judgment.
 
 ## 1. Think Before Coding
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+**State consequential assumptions and surface tradeoffs.**
 
 Before implementing:
 
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
+- State assumptions that affect the result. Make reasonable, reversible
+  choices within the authorized scope.
+- Ask when an unresolved choice could materially change the outcome,
+  permissions, or scope.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+
+In a Herdr team, members bring questions and blockers to the lead. The lead
+uses the authorization already given, continues independent work, and brings
+the user decisions only they can make.
+
+The assigned reviewer fixes confirmed issues within scope. The coder
+re-reviews those fixes, then the reviewer checks the candidate again. The
+lead assigns one editor at a time and repeats the
+[review and repair cycle](HERDR.md#review-and-repair) until checks pass and
+no actionable issues remain.
+
+For a commit the user authorizes in a Herdr team, follow the
+[team commit procedure](HERDR.md#commit-reviewed-changes).
+
+In every Herdr role, record the current task before starting work and
+refresh the note after decisions, checks, and handoffs. When you decide
+to compact, update the note and ask a teammate to invoke `/compact`
+after your turn ends. Then run `herdr-context load` and check its task data
+against the current assignment before resuming.
+[Context checkpoints](HERDR.md#context-checkpoints)
 
 ## 2. Simplicity First
 

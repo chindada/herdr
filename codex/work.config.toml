@@ -1,0 +1,10 @@
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[mcp_servers.gitlab]
+command = "npx"
+args = ["-y", "@zereight/mcp-gitlab"]
+env_vars = ["GITLAB_PERSONAL_ACCESS_TOKEN"]
+
+[mcp_servers.gitlab.env]
+GITLAB_API_URL = "https://gitlab.com/api/v4"

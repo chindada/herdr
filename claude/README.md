@@ -13,11 +13,13 @@ second, independent profile.
 
 ## 1. Prerequisites
 
-Install Claude Code and GitHub MCP.
+Install Claude Code.
 
 ```sh
 curl -fsSL https://claude.ai/install.sh | bash
 ```
+
+Install GitHub MCP if the profile needs it.
 
 ```sh
 brew install github-mcp-server
@@ -39,13 +41,13 @@ go install golang.org/x/tools/gopls@latest
 | `~/.local/bin/claude` | Claude Code native installation |
 | `github-mcp-server` | GitHub MCP |
 | `npx` | GitLab and iOS Simulator MCP |
-| `pyright` | `pyright-lsp` plugin |
+| `pyright-langserver` | `pyright-lsp` plugin |
 | `typescript-language-server` | `typescript-lsp` plugin |
 | `gopls` | `gopls-lsp` plugin |
-| `jq` | The status line in `settings.json` |
+| `jq` | The status line script |
 
 If `jq` is missing from the Herdr terminal, run `brew install jq` before
-using the template's status line.
+using the status line.
 
 ## 2. Profile aliases
 
@@ -67,9 +69,11 @@ CLAUDE_CONFIG_DIR="$HOME/.claude" "$HOME/.local/bin/claude"
 
 ## 3. Configuration
 
-Review the permissions, model, and plugins in the
-[settings template](settings.json). If `settings.json` exists, back it up and
-merge the settings you need. The block below creates missing files. Remove the
+Install the [shared checkpoint helper](../HERDR.md#context-checkpoints).
+The [settings template](settings.json) configures the Herdr footer, saves
+and restores checkpoints during compaction, and starts with Remote Control
+off. It turns off auto-compact so team agents can choose when to use
+`/compact`. The block below creates missing settings files. Remove the
 second directory from the loop if you only use the primary profile.
 
 ```sh
@@ -86,6 +90,156 @@ second directory from the loop if you only use the primary profile.
     fi
   done
 )
+```
+
+### Update an existing profile
+
+Back up each profile's `settings.json` and merge the template. Replace
+`PreCompact`, `SessionStart`, and `statusLine` entries copied from an
+earlier template with the current ones, and set `autoCompactEnabled` to
+`false`. The `SessionStart` group has no matcher, so it runs for every
+session source. The `PreCompact` hook sets `onFailure` to `block`, so a
+missing or failing helper stops compaction in a Herdr pane. Confirm the two
+checkpoint hooks are loaded with `/hooks`.
+[Claude Code hooks](https://code.claude.com/docs/en/hooks)
+
+To adopt the new defaults, review the entries copied from the old template:
+
+- Remove the broad file, web, skill, and MCP allow rules. In particular,
+  remove the GitHub wildcard before setting up a reviewer. Use
+  `/permissions` to grant an individual tool from a trusted server when
+  that pane needs it.
+- Move `defaultMode`, the Git commit and push rules, and model and UI
+  preferences to the appropriate user or role. Drop the empty `ask` list
+  and the old `skipDangerousModePermissionPrompt`,
+  `skipWorkflowUsageWarning`, and `skipAutoPermissionPrompt` entries.
+  Let Claude record each user's responses.
+- Keep enabled plugins and marketplace entries only where used. Use
+  `/plugin` in each existing profile to disable installed plugins you no
+  longer need.
+
+### Roles and preferences
+
+An interactive coder can opt into Auto mode and the `fable` model alias
+when their account supports both. Team reviewers use Auto mode so they
+can repair issues in the task checkout during their assigned turn.
+The lead prepares the frozen candidate for each handoff.
+[Herdr review and repair](../HERDR.md#review-and-repair)
+
+Use either Claude alias and adjust the settings file path for the profile.
+
+```zsh
+claude --permission-mode auto --model fable
+claude --permission-mode auto --settings "$HOME/.claude/herdr-reviewer.json"
+```
+
+Use `/config` for appearance, suggestions, and model fallback preferences.
+Use `/effort` to save an effort level for the active
+model or `--effort` for one launch. Recent models use model-specific saved
+effort in user settings.
+
+Use these Git rules in the role settings file passed with `--settings`.
+For a coder, save the example as `~/.claude/herdr-worker.json`. For a
+reviewer, save it as `~/.claude/herdr-reviewer.json`.
+
+```json
+{
+  "permissions": {
+    "deny": ["Bash(git commit *)", "Bash(git push *)"]
+  }
+}
+```
+
+```zsh
+claude --permission-mode auto --settings "$HOME/.claude/herdr-worker.json"
+```
+
+If you installed the previous reviewer example, remove its `Edit`,
+`Write`, and `NotebookEdit` deny entries from the reviewer settings file.
+Keep the Git denies and any team communication rules when merging the file.
+Use read-only MCP registrations and scoped credentials for remote review
+operations.
+
+### Herdr team communication
+
+For a role that reports through `hc`, set up the commands it needs in its
+role settings file before launching it. Manual mode may otherwise ask
+for approval on each shell call. Merge these entries into the file's
+`permissions` object. Use the names chosen for `hc run --name` during
+[Herdr setup](../HERDR.md#prepare-team-communication). Start the chosen
+Claude alias with `--settings` pointing to that file.
+
+```json
+{
+  "permissions": {
+    "allow": ["Bash(hc get -- project-review)", "Bash(hc send -- project-lead *)"]
+  }
+}
+```
+
+For a lead, include a `get` entry for its own name and separate
+entries for each member and command needed, such as
+`Bash(hc read --lines 0 -- project-review)`,
+`Bash(hc wait --timeout 45 -- project-review)`, or
+`Bash(hc send -- project-review *)`. Use the listed command form including
+the option separator before the literal name. Verify the return path during
+[team onboarding](../HERDR.md#prepare-team-communication).
+
+When a role can compact a teammate's pane, add the exact allow entry
+`Bash(herdr-context compact project-review)` with the authorized name.
+Verify that `herdr-context` and `hc` resolve to your trusted installations.
+
+### Status line
+
+Both profiles run one installed copy of the
+[status line script](statusline.sh). Install it, or update it after pulling
+this repository, with:
+
+```sh
+mkdir -p "$HOME/.claude" &&
+  install -m 755 claude/statusline.sh "$HOME/.claude/herdr-statusline.sh"
+```
+
+The footer shows the project directory, Git branch, model, and context use.
+It adds the 5-hour quota left and the effort level when Claude Code reports
+them. In an existing `settings.json`, replace only the `statusLine` value:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/herdr-statusline.sh"
+  }
+}
+```
+
+To show the same values in Herdr's Pixel HQ layout, export
+`HERDR_STATUSLINE_LABELS=1` in the terminal before you launch Claude Code.
+The script then sets the `agent.model`, `agent.context`, `agent.quota`, and
+`agent.effort` labels on that terminal with `hc label`. Without the variable,
+the script only prints the footer.
+
+If the terminal already ran Pixel HQ's own status line, start a fresh pane.
+Its `claude.*` labels take precedence over the `agent.*` labels.
+
+### Project MCP servers
+
+The template leaves `enableAllProjectMcpServers` unset, so Claude Code asks
+before it starts the servers in a project's `.mcp.json`. Approve them in that
+dialog for each project you trust. If an existing `settings.json` sets
+`enableAllProjectMcpServers` to `true`, remove the key. At user level it also
+starts servers from folders you have not trusted yet.
+
+### Agent teams
+
+Herdr coordinates agents across terminals, so the template leaves Claude
+Code agent teams off. If an existing `settings.json` sets
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` in its `env` block, remove it to
+return to the default. To try agent teams in one session, set the variable
+for that launch only:
+
+```zsh
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 claude
 ```
 
 ## 4. MCP credentials
@@ -129,20 +283,36 @@ claude-k mcp add --scope user --transport http context7 \
   --header 'CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}'
 ```
 
+For GitHub review, register GitHub MCP in read-only mode in the profile
+that needs it. Use a token scoped to the repositories under review.
+In the review session, check `/mcp` for the effective server. A project or
+local registration with the same name can take precedence over this
+user-level registration.
+
 ```sh
 claude mcp add --scope user github \
   -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN}' \
-  -- github-mcp-server stdio
+  -- github-mcp-server stdio --read-only
 claude-k mcp add --scope user github \
   -e 'GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN}' \
-  -- github-mcp-server stdio
+  -- github-mcp-server stdio --read-only
 ```
 
+Register GitLab only in a profile that needs it. The server reads its
+token and API URL from its environment. If you registered it earlier
+with a `--token` argument, remove it and register it again so the token
+stays out of the process arguments. For a review-only registration, add
+`-e GITLAB_PERMISSION_MODE=readonly` before the command separator `--`.
+
 ```sh
-claude mcp add --scope user gitlab -- npx -y @zereight/mcp-gitlab \
-  '--token=${GITLAB_PERSONAL_ACCESS_TOKEN}' --api-url=https://gitlab.com/api/v4
-claude-k mcp add --scope user gitlab -- npx -y @zereight/mcp-gitlab \
-  '--token=${GITLAB_PERSONAL_ACCESS_TOKEN}' --api-url=https://gitlab.com/api/v4
+claude mcp add --scope user gitlab \
+  -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_PERSONAL_ACCESS_TOKEN}' \
+  -e GITLAB_API_URL=https://gitlab.com/api/v4 \
+  -- npx -y @zereight/mcp-gitlab
+claude-k mcp add --scope user gitlab \
+  -e 'GITLAB_PERSONAL_ACCESS_TOKEN=${GITLAB_PERSONAL_ACCESS_TOKEN}' \
+  -e GITLAB_API_URL=https://gitlab.com/api/v4 \
+  -- npx -y @zereight/mcp-gitlab
 ```
 
 ```sh
@@ -152,16 +322,21 @@ claude-k mcp add --scope user ios-simulator npx ios-simulator-mcp
 
 ## 6. Optional plugins
 
-Install the plugins you need for the profile you use. Keep `flutter` and
-`dart` on `PATH` if you use the Flutter plugin.
+Run only the install commands for the profile and projects that need
+them. Enable Superpowers in each participating profile when the team
+adopts its workflow. Keep `flutter` and `dart` on `PATH` if you use the
+Flutter plugin.
+
+Run `plugin marketplace list` with the chosen alias. Add any missing
+marketplace you plan to use before installing its plugins. The official
+marketplace registration also creates the local checkout used by the
+[Codex skill copy](../codex/README.md#optional-skills-and-plugins).
 
 ```sh
-claude plugin marketplace add \
-  https://github.com/anthropics/claude-plugins-official
+claude plugin marketplace add anthropics/claude-plugins-official
 claude plugin marketplace add flutter/agent-plugins
 claude plugin marketplace add typesafe-ai/skills
-claude-k plugin marketplace add \
-  https://github.com/anthropics/claude-plugins-official
+claude-k plugin marketplace add anthropics/claude-plugins-official
 claude-k plugin marketplace add flutter/agent-plugins
 claude-k plugin marketplace add typesafe-ai/skills
 ```
@@ -206,6 +381,11 @@ claude plugin list
 claude-k mcp list
 claude-k plugin list
 ```
+
+`claude mcp list` starts every eligible server to check its health. That
+includes the approved servers from the current folder's `.mcp.json`, but not
+servers that are still pending approval. Run it from a folder whose project
+servers you trust.
 
 [context7-token]: https://context7.com/dashboard
 [github-token]: https://github.com/settings/tokens

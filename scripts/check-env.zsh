@@ -2,15 +2,25 @@
 
 set +x +v
 
+usage() {
+  printf '%s\n' 'Usage: scripts/check-env.zsh codex [--profile NAME] | claude | claude-k' >&2
+  exit 2
+}
+
 case "$#:${1-}" in
   1:codex|1:claude|1:claude-k) ;;
-  *)
-    printf '%s\n' 'Usage: scripts/check-env.zsh codex|claude|claude-k' >&2
-    exit 2
+  3:codex)
+    [ "$2" = --profile ] || usage
+    case "$3" in
+      ''|*[!A-Za-z0-9_-]*) usage ;;
+      *) ;;
+    esac
     ;;
+  *) usage ;;
 esac
 
 target=$1
+codex_profile=${3-}
 case "$0" in
   */*) script_dir=${0%/*} ;;
   *) script_dir=. ;;
@@ -58,7 +68,7 @@ codex_mcp_variables() {
   if codex_python=$(uv python find --offline --no-python-downloads \
       --no-cache --no-project --no-config) &&
       [ -f "${codex_python}" ] && [ -x "${codex_python}" ]; then
-    if "${codex_python}" -IB "$1" "$2"; then
+    if "${codex_python}" -IB "$@"; then
       return 0
     else
       codex_python_status=$?
@@ -70,20 +80,21 @@ codex_mcp_variables() {
   fi
 
   command -v python3 >/dev/null || return 3
-  python3 -IB "$1" "$2"
+  python3 -IB "$@"
 }
 
 check_codex_config() {
-  codex_config_file=$1
-  check_file "${codex_config_file}" || return
+  for codex_config_file do
+    check_file "${codex_config_file}" || return
+  done
 
-  if codex_variables=$(codex_mcp_variables "${script_dir}/check-codex-config.py" "${codex_config_file}" 2>/dev/null); then
+  if codex_variables=$(codex_mcp_variables "${script_dir}/check-codex-config.py" "$@" 2>/dev/null); then
     ok 'Checked Codex TOML syntax and basic MCP fields'
     check_mcp_environment "${codex_variables}"
   else
     case "$?" in
       3) note 'Skipped TOML and MCP credential checks. They require uv and an installed Python with tomllib.' ;;
-      *) fail "Could not parse TOML or MCP environment settings in ${codex_config_file}" ;;
+      *) fail "Could not parse the selected Codex TOML or combined MCP settings in $*" ;;
     esac
   fi
 }
@@ -131,6 +142,12 @@ check_claude_config() {
 printf 'Checking %s\n' "${target}"
 if [ -n "${HC_TERMINAL_ID:-}" ]; then
   ok 'Detected the current Herdr terminal'
+  context_helper="${HOME}/.local/bin/herdr-context"
+  if [ -f "${context_helper}" ] && [ -x "${context_helper}" ]; then
+    ok "Context checkpoint helper is installed at ${context_helper}"
+  else
+    fail "Install the context checkpoint helper as an executable at ${context_helper}"
+  fi
 else
   note 'HC_TERMINAL_ID is missing. Run this check from the Herdr terminal where you launch the tool.'
 fi
@@ -152,12 +169,19 @@ if [ "${target}" = codex ]; then
   else
     fail 'Could not determine the Codex CLI version'
   fi
-  check_codex_config "${CODEX_HOME:-${HOME}/.codex}/config.toml"
-  for tool in uvx adb; do
-    if ! command -v "${tool}" >/dev/null; then
-      note "${tool} is missing from PATH. Jira, Confluence, or Android MCP may require it."
-    fi
-  done
+  codex_config_dir=${CODEX_HOME:-${HOME}/.codex}
+  if [ -n "${codex_profile}" ]; then
+    check_codex_config "${codex_config_dir}/config.toml" \
+      "${codex_config_dir}/${codex_profile}.config.toml"
+  else
+    check_codex_config "${codex_config_dir}/config.toml"
+  fi
+  if ! command -v uvx >/dev/null; then
+    note 'Optional Atlassian and Android MCP servers need uvx on PATH.'
+  fi
+  if ! command -v adb >/dev/null; then
+    note 'The optional Android MCP server needs adb on PATH.'
+  fi
 else
   claude_config_dir="${HOME}/.${target}"
   claude_bin="${HOME}/.local/bin/claude"

@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"${HC_TERMINAL_ID:-}\" ]; then out=$(\"$HOME/.local/bin/herdr-context\" save codex) && printf '%s' \"$out\" || printf '%s\\n' '{\"continue\":false,\"stopReason\":\"The Herdr checkpoint helper is missing or failed. Reinstall it and record a task note before compacting.\"}'; fi",
+            "timeout": 5,
+            "statusMessage": "Saving task checkpoint"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/.local/bin/herdr-context\" start",
+            "timeout": 5,
+            "statusMessage": "Checking task checkpoint"
+          }
+        ]
+      }
+    ]
+  }
+}
