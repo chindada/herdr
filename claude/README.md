@@ -130,9 +130,9 @@ can show a native dialog to acknowledge this mode. Answer it once in the
 member's pane. The lead waits and continues onboarding after you clear it.
 
 For approval-based launches, an interactive coder or reviewer can opt into
-Auto mode when the account supports it. An authorized reviewer can repair
-issues in the task checkout during their assigned turn. The lead prepares
-the frozen candidate for each handoff.
+Auto mode when the account supports it. Reviewers inspect the frozen
+candidate in read-only turns and report findings to the lead. An authorized
+repair uses a separate editor assignment with checkout write access.
 [Herdr review and repair](../HERDR.md#review-and-repair)
 
 Use either Claude alias and adjust the settings file path for the profile.
@@ -164,11 +164,10 @@ reviewer, save it as `~/.claude/herdr-reviewer.json`.
 claude --permission-mode auto --settings "$HOME/.claude/herdr-worker.json"
 ```
 
-If you installed the previous reviewer example, remove its `Edit`,
-`Write`, and `NotebookEdit` deny entries from the reviewer settings file.
-Keep the Git denies and any team communication rules when merging the file.
-Use read-only MCP registrations and scoped credentials for remote review
-operations.
+Keep any existing `Edit`, `Write`, and `NotebookEdit` denies in reviewer
+settings. Keep the Git denies and team communication rules when merging
+the file. Use read-only MCP registrations and scoped credentials for remote
+review operations.
 
 ### Herdr team communication
 
@@ -203,6 +202,8 @@ entries for each member and command needed, such as
 `Bash(hc send -- project-review *)`. Use the listed command form including
 the option separator before the literal name. Verify the return path during
 [team onboarding](../HERDR.md#prepare-team-communication).
+If the reviewer settings require it, agree during onboarding to print READY
+and the review report in the reviewer's pane.
 
 When a role can compact a teammate's pane, add the exact allow entry
 `Bash(herdr-context compact project-review)` with the authorized name.
@@ -397,10 +398,16 @@ claude-k plugin install typesafe@typesafe-ai
 
 ## 7. Sign in and verify
 
-From the target checkout in the Herdr pane that will run Claude Code, set
-`herdr_source` to the verified absolute source checkout path. Run the offline
-check for the profile you will launch. Use the pane and shell where you
-prepared its credentials. [Herdr launch rules](../HERDR.md#launch-rules)
+Follow the [shared Herdr launch preflight](../HERDR.md#launch-preflight)
+from the target checkout for the selected `CLAUDE_CONFIG_DIR` and settings
+file. Check the enabled or task-relevant LSP and MCP executables in the
+[prerequisites table](#1-prerequisites). Include `HERDR_STATUSLINE_LABELS=1`
+on the verified route when the user opts into [status-line labels](#status-line).
+For credentials entered in a prepared shell, complete the same-shell child
+check before launching there.
+
+For offline installation diagnostics, set `herdr_source` to the verified
+absolute source checkout path and run the check for the chosen profile.
 
 ```sh
 "$herdr_source/scripts/check-env.zsh" claude
@@ -408,8 +415,9 @@ prepared its credentials. [Herdr launch rules](../HERDR.md#launch-rules)
 ```
 
 Launch that profile, use `/login` on first launch, and check the required
-connections with `/mcp`. You can list the installed servers and plugins from
-the same terminal.
+connections with `/mcp`. Verify the needed capability with a read-only call
+and use an authenticated call when the task requires authentication. You can
+list the installed servers and plugins from the same terminal.
 
 ```sh
 claude mcp list

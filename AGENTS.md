@@ -26,11 +26,9 @@ Follow [Specify and plan work](HERDR.md#specify-and-plan-work) for numbered
 specifications, Context7 research, code-comment requirements, and the review
 gates before implementation.
 
-The assigned reviewer fixes confirmed issues within scope. The coder
-re-reviews those fixes, then the reviewer checks the candidate again. The
-lead assigns one editor at a time and repeats the
-[review and repair cycle](HERDR.md#review-and-repair) until checks pass and
-no actionable issues remain.
+Follow the [review and repair cycle](HERDR.md#review-and-repair) for
+independent read-only reviews and author confirmation. Only the editor
+assigned by the lead may edit the task checkout during that turn.
 
 For a commit the user authorizes in a Herdr team, follow the
 [team commit procedure](HERDR.md#commit-reviewed-changes).

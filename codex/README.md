@@ -144,13 +144,11 @@ profile and set `GITLAB_PERMISSION_MODE = "readonly"` under
 
 ### Review profile
 
-Save this as `review.config.toml` beside `config.toml` so reviewers can
-fix issues in the task checkout with on-request approvals. If you used the
-previous read-only profile, change its `sandbox_mode` to `workspace-write`
-before launching the reviewer.
+Save this as `review.config.toml` beside `config.toml` for read-only review
+turns with on-request approvals.
 
 ```toml
-sandbox_mode = "workspace-write"
+sandbox_mode = "read-only"
 approval_policy = "on-request"
 
 [mcp_servers.context7]
@@ -163,10 +161,10 @@ in that table and export `CONTEXT7_API_KEY` in the pane that will launch
 the reviewer.
 
 For approval-based reviews, launch from the task checkout with
-`codex --no-daemon --profile review`.
-Apply repairs during the turn assigned by the lead and leave the frozen
-candidate intact. Use read-only tooling and scoped credentials for remote
-MCP servers added to this profile.
+`codex --no-daemon --profile review`. Inspect the frozen candidate and report
+findings to the lead. An authorized repair uses a separate editor assignment
+and a profile with checkout write access. Use read-only tooling and scoped
+credentials for remote MCP servers added to this profile.
 [Herdr review and repair](../HERDR.md#review-and-repair)
 
 ### Herdr team communication
@@ -211,6 +209,8 @@ The check reads the selected rules and uses scratch for startup files. Check
 both `hc get` selectors and the separate `hc send` selector this way. Each
 should match its own rule, and an unrelated terminal should have no match.
 Verify the READY return path with the prepared role in Herdr.
+If the review profile's permissions require it, agree during onboarding
+to print READY and the review report in the reviewer's pane.
 
 To let a role compact a teammate's pane, add a rule for the installed
 `herdr-context` helper and the literal authorized target. Verify that
@@ -315,11 +315,14 @@ only if you want to try it.
 
 ## Verification and launch
 
-In the Herdr pane for the target checkout, set `herdr_source` to the verified
-absolute source checkout path. Check and launch with the same profile and
-environment. The offline check runs separately from `codex mcp list`, which
-can contact configured HTTP MCP servers and send configured headers.
-[Herdr launch rules](../HERDR.md#launch-rules)
+Follow the [shared Herdr launch preflight](../HERDR.md#launch-preflight)
+for the target checkout, `CODEX_HOME` when set, and the default or named
+profile. Use the passing route and keep `--no-daemon` on every Herdr launch.
+Set `herdr_source` to the verified absolute source checkout path for offline
+installation diagnostics. The helper reports variables referenced by the
+configuration. Use the preflight to identify credentials required for the
+task. `codex mcp list` shows configuration inventory and can contact
+configured HTTP MCP servers and send configured headers.
 
 Use the base profile by default.
 
@@ -337,10 +340,14 @@ codex --profile work mcp list
 codex --no-daemon --profile work
 ```
 
-Use `/mcp` in the session and call one read-only tool from each server you
-need to confirm its connection. The offline check covers the base and
-selected user profile. Use Codex's listing and the in-session check for any
-additional settings applied by a trusted project.
+Use `/mcp` in the session and call one read-only tool from each server the
+task needs, including servers enabled by the trusted project. Report a
+successful Context7 lookup with `CONTEXT7_API_KEY` unset as public access.
+With Context7 disabled in the example `review` profile, skip its checks.
+For GitLab work on the `work` profile, require a nonempty exported
+`GITLAB_PERSONAL_ACCESS_TOKEN` and a successful authenticated read-only call.
+A missing token blocks GitLab work. The default and example `review`
+profiles omit GitLab unless configured separately.
 
 [npm-permissions]: https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally/
 [codex-rules]: https://learn.chatgpt.com/docs/agent-configuration/rules

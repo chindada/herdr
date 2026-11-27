@@ -80,27 +80,12 @@ CLAUDE_CONFIG_DIR="$HOME/.claude" "$HOME/.local/bin/claude"
 ## Launch rules
 
 A terminal started with `hc run` gets the Herdr Core's program environment
-and explicit child overrides. Set variables in the child launch environment.
-When an agent needs MCP credentials, start a shell with `hc run --bg` and no
-command. A person enters the credentials there and launches the agent from
-that shell. Reuse the prepared pane for tasks that need the same role and
-access. [Herdr Core launch source](https://github.com/herdrdev/herdr-core/blob/master/crates/herdr-core/src/api/run.rs)
+and explicit child overrides. The Core's `PATH` can differ from your shell's.
+An absolute CLI path resolves the CLI itself. Its subprocesses use the child
+environment. [Herdr Core launch source](https://github.com/herdrdev/herdr-core/blob/master/crates/herdr-core/src/api/run.rs)
 
-`hc run` starts executables, and the core's `PATH` can differ from your shell's.
-An absolute agent executable path resolves the agent itself. Probe required
-subprocesses on the actual core route and in any launch wrapper and profile.
-For example, compare `command -v dart` in the login shell with
-`hc exec -- /bin/sh -c 'command -v dart'` on the verified core. When a path is
-missing, use a verified login shell or explicit executable directories in the
-child environment. An unavailable optional tool only blocks work that needs it.
-
-```zsh
-hc run --bg --cwd "$PWD" -- \
-  /bin/zsh -lic 'codex --yolo --no-daemon'
-```
-
-Use this team launch mode when the user authorizes its flags. Otherwise use
-the approval-based alternative, which keeps the configured permission mode.
+Use team launch flags only with user authorization. For approval-based
+launches, keep the configured permission mode.
 Keep the running lead when provisioning members from its starter prompt.
 
 For opted-in Claude telemetry, set `HERDR_STATUSLINE_LABELS=1` in the child
@@ -109,8 +94,51 @@ shell or pass it as an explicit nonsecret `env` argument to `hc run`. See
 and quota reporting.
 
 Keep credential values in the environment only. Never put them in command
-arguments, `hc send` text, labels, files, or reports. Refer to a credential by
-its variable name.
+arguments, `hc send` text, labels, files, or reports.
+
+### Launch preflight
+
+For each requested profile, record the target Herdr Core and machine,
+checkout (`--cwd`), CLI executable, wrapper, nonsecret overrides, and
+authorized CLI arguments. For Claude, include `CLAUDE_CONFIG_DIR` and any
+`--settings` file. For Codex, include `CODEX_HOME` when set and the effective
+default or named `--profile`. For a remote launch, use the same `--on <machine>`
+for `hc exec` and `hc run`. Use checkout, executable, and profile paths
+verified on that machine and keep the returned full address.
+
+Check the executables for Claude's enabled or task-relevant LSP plugins and
+MCP servers, such as `pyright-langserver`, `github-mcp-server`, and `npx`.
+For Codex, check enabled MCP stdio commands and the Dart subprocess when
+the profile uses Dart. For a plain local Core Dart probe, use
+`hc exec --cwd "$project_dir" -- /bin/sh -c 'command -v dart'`.
+Check credentials required by the selected profile and task from a child
+process. Report variable names with `set` for exported, nonempty values or
+`unset` otherwise. Skip checks for disabled tools and report optional gaps
+without blocking unrelated work.
+
+Use `hc exec` on the planned machine, cwd, wrapper, and nonsecret overrides
+for an initial non-PTY probe. When selecting a login wrapper or when startup
+depends on the terminal, repeat the checks in a non-agent `hc run` PTY probe
+on the same route and profile, or in the actual terminal before launching the
+CLI. If the direct Core route lacks required items, choose a verified login
+shell or set an explicit nonsecret child `PATH` and repeat the preflight.
+Launch on the route that passes and verify `foreground.argv` and
+`foreground.cwd` with `hc get` before accepting readiness for affected work.
+
+If a required credential is still unset, report that capability as blocked
+and use a prepared shell on the verified route. After the user enters the
+credentials, check that each required variable is exported and nonempty
+from a child of that same live shell, with the selected cwd, profile, wrapper,
+and overrides. A fresh `hc exec` uses the Core environment. Launch the
+authorized CLI from the verified shell and reuse the pane for the same role
+and access.
+
+Report the route, resolved executables, and credential status separately
+from MCP connection and authentication results. Treat `codex mcp list` as
+configuration inventory. Check MCP health with tool discovery or a
+read-only call, and make a read-only call when the task depends on that
+server. Require authenticated read-only access when the task needs it, such
+as GitLab on Codex `work`. Report a keyless Context7 lookup as public access.
 
 ## Three levels of verification
 
@@ -120,9 +148,9 @@ question.
 | Check | Proves | Starts or contacts MCP servers |
 | --- | --- | --- |
 | `"$herdr_source/scripts/check-env.zsh" <target>` | Commands, paths, variable names | No |
-| `codex mcp list` | Codex reads the configuration | Can contact configured HTTP MCP servers during authentication discovery and send configured headers |
+| `codex mcp list` | Configuration inventory | Can contact configured HTTP MCP servers during authentication discovery and send configured headers |
 | `claude mcp list` | Eligible servers answer | Yes |
-| `/mcp` and one read-only tool call | Credentials and permissions work | Yes |
+| `/mcp` and one read-only tool call | The capability used by that call works | Yes |
 
 Use `"$herdr_source/scripts/check-env.zsh" codex` for local-only verification. Add
 `--profile <name>` to include a named user profile.
@@ -136,6 +164,23 @@ you trust the project, and run the command from a folder you trust.
 
 A lead agent coordinates other agents in the same space with `hc`. The person
 decides who is on the team and what each member may do.
+
+The lead owns scope and acceptance boundaries, assignments and single-editor
+handoffs, consolidation of independent reviewer findings, readiness and
+checkpoint verification, artifact freezing, and authorized commits and
+delivery. To preserve its context and attention for team coordination, the
+lead assigns authorized coders to draft and repair specifications and plans,
+and to implement and repair changes. If no suitable coder is available,
+leave the writing pending and follow
+[Agree on the roster](#agree-on-the-roster).
+
+This delegation applies to new work under the revised guide. Artifacts already
+accepted during this transition keep their accepted status.
+
+Under [Review and repair](#review-and-repair), the original author is the
+default repair coder and confirms the refrozen digest. Each assigned coder
+records its own [checkpoint](#context-checkpoints) before starting and
+refreshes it after each handoff.
 
 ### Record the facts
 
@@ -184,6 +229,8 @@ The requested roster authorizes its listed roles and commands. Either CLI
 can be a coder or reviewer. The roster and per-turn assignment determine
 the role. When no roster is authorized, propose the smallest suitable set
 of roles and wait for the user's launch authorization.
+For review work, reserve two eligible reviewers as described in
+[Review and repair](#review-and-repair).
 
 Inspect `hc ls` and verify candidates with `hc get`. Reuse an authorized
 live member whose role, running CLI conversation, parent, current directory,
@@ -196,8 +243,9 @@ terminals alone.
 ### Prepare team communication
 
 Before dispatching work, use the real launch profile for each role.
-Verify that the lead can inspect and contact each authorized member and
-that the coder and reviewer can edit the task checkout when assigned.
+Verify that the lead can inspect and contact each authorized member, that
+reviewers can inspect the frozen candidate and report, and that the assigned
+editor can edit the task checkout.
 Use the onboarding READY message to verify the member's return path.
 When a role needs permission for the local Herdr connection, configure
 it during setup.
@@ -226,7 +274,8 @@ Use `hc run --bg` for every new interactive member. Bind `project_dir`
 and `space_id` to the verified target checkout and space ID. Use the
 verified `lead` address and prepare an `onboarding_prompt` for that member's
 role using [Onboard a member](#onboard-a-member). Pass it as the first
-positional prompt. The same launch works for either role.
+positional prompt. Follow [Launch preflight](#launch-preflight) and use the
+passing route for either role.
 
 These visible-team examples opt into the space with `herdr.space`.
 A `herdr.tab` label selects a tab. Without it, Herdr can create a
@@ -238,6 +287,9 @@ checkout path on that machine and keep the returned full address.
 For a requested shared layout, use [Show the team](#show-the-team) to
 move the same authorized terminals into the lead's tab.
 
+The local examples below use user-authorized team launch flags and, for
+Claude, opted-in status-line telemetry.
+
 ```zsh
 hc run --bg --cwd "$project_dir" --parent "$lead" \
   --label "herdr.space=$space_id" -- \
@@ -247,26 +299,33 @@ hc run --bg --cwd "$project_dir" --parent "$lead" \
 ```zsh
 hc run --bg --cwd "$project_dir" --parent "$lead" \
   --label "herdr.space=$space_id" -- \
-  env CLAUDE_CONFIG_DIR="$HOME/.claude" "$HOME/.local/bin/claude" \
+  env HERDR_STATUSLINE_LABELS=1 \
+  CLAUDE_CONFIG_DIR="$HOME/.claude" "$HOME/.local/bin/claude" \
   --dangerously-skip-permissions -- "$onboarding_prompt"
 ```
 
 Use a verified executable path if the core's PATH differs. Set
 `CLAUDE_CONFIG_DIR` to the selected profile, such as `$HOME/.claude-k`.
-Without it, Claude Code reads a different configuration than the profile
-aliases. Alternatively, launch a Claude alias through a verified login
-shell. When wrapping a launch in zsh, pass the onboarding text as a
-positional argument to the shell.
-
-For `--on` launches, use executable and profile paths verified on the target
-machine, or expand `HOME` inside a verified target login shell. The `$HOME`
-in the local example expands on the caller.
+Use the optional login route below after verifying the wrapper on the
+target Core. In `zsh -lic`, `herdr-member` is the `$0` sentinel. The fixed
+shell code `exec "$@"` replaces the wrapper and forwards arguments literally.
+Pass the executable, nonsecret overrides, flags, and prompt after the
+sentinel. For remote launches, bind absolute paths verified on the target
+machine before running the command.
 
 ```zsh
 hc run --bg --cwd "$project_dir" --parent "$lead" \
   --label "herdr.space=$space_id" -- \
-  /bin/zsh -lic 'exec codex --yolo --no-daemon -- "$1"' \
-  herdr-member "$onboarding_prompt"
+  /bin/zsh -lic 'exec "$@"' herdr-member \
+  env HERDR_STATUSLINE_LABELS=1 CLAUDE_CONFIG_DIR="$claude_config_dir" \
+  "$claude_bin" --dangerously-skip-permissions -- "$onboarding_prompt"
+```
+
+```zsh
+hc run --bg --cwd "$project_dir" --parent "$lead" \
+  --label "herdr.space=$space_id" -- \
+  /bin/zsh -lic 'exec "$@"' herdr-member \
+  "$codex_bin" --yolo --no-daemon --profile work -- "$onboarding_prompt"
 ```
 
 For an authorized background-only launch, omit the
@@ -274,9 +333,10 @@ For an authorized background-only launch, omit the
 Keep `--parent "$lead"` and use the verified live parent's space for the
 hidden member.
 
-Use the launch flags the user authorized. Keep any selected Codex
-`--profile` or Claude configuration directory and settings file. For
-approval-based launches, see the [Codex review profile](codex/README.md#review-profile)
+Use the launch flags the user authorized. Keep `--no-daemon` for Codex and
+any selected Codex `--profile` or Claude configuration directory and settings
+file. For approval-based launches, see the
+[Codex review profile](codex/README.md#review-profile)
 and [Claude role settings and Auto mode](claude/README.md#roles-and-preferences).
 Those permission settings apply to their own mode. A launch that bypasses
 approvals still follows the assigned scope. If managed policy, tool
@@ -297,9 +357,10 @@ dialog keys to the user. After the user clears it, check whether the initial
 prompt was delivered. If it was missed, use the idle-composer onboarding
 steps below before dispatching work.
 
-For a member that needs MCP credentials, start a shell instead. Give it a
-pane as described in [Show the team](#show-the-team), so a person can enter
-the credentials, run the environment check, and launch the agent there.
+For a member missing required MCP credentials, start a shell with
+`hc run --bg` and no command. Give it a pane as described in
+[Show the team](#show-the-team) for user entry, then follow the prepared-shell
+recheck in [Launch preflight](#launch-preflight) before launch.
 
 ```zsh
 hc run --bg --cwd "$project_dir" --parent "$lead"
@@ -453,9 +514,9 @@ This step is setup only. Leave the checkout and layout as they are.
    print the reply in your pane.
 
 Stay interactive and wait for an assignment from the lead.
-Launch authority belongs to the lead. A review assignment specifies
-whether you are the editor for that turn. Bring questions and blockers
-to the lead. The designated lead handles authorized commits.
+Launch authority belongs to the lead. Review turns are read-only. Edit the
+checkout only on a separate editor assignment from the lead. Bring questions
+and blockers to the lead. The designated lead handles authorized commits.
 Use English for agent work and records. Use Taiwan Traditional Chinese
 for human-facing text and short hc replies. Preserve protocol fields.
 ```
@@ -516,21 +577,25 @@ scope, or the user has paused the work, let the member stand by.
 ### Specify and plan work
 
 A tiny change has an obvious outcome, a confined edit, and a direct check.
-Record its scope and check and use the normal implementation review. Use the
-full sequence for changed behavior, design decisions, dependencies across
-repositories, or work for which the user requests it. If a tiny change grows,
-review the expanded specification before continuing.
+The lead records its scope and check, verifies a suitable authorized coder,
+and assigns that coder. Skip the separate formal specification and plan and
+use the normal implementation review. Use the full sequence for changed
+behavior, design decisions, dependencies across repositories, or work for
+which the user requests it. If a tiny change grows, review the expanded
+specification before continuing.
 
-1. Write a specification with the outcome, requirements, constraints, and
-   testable acceptance criteria. Save it in `docs/superpowers/specs/` using
-   a four-digit sequence and a meaningful slug, such as `0001-team-workflow.md`.
+1. The assigned coder writes a specification with the outcome, requirements,
+   constraints, and testable acceptance criteria. Save it in
+   `docs/superpowers/specs/` using a four-digit sequence and a meaningful slug,
+   such as `0001-team-workflow.md`.
    Start at `0001`, then use the next unused sequence in the target directory.
    Omit dates from specification names.
-2. After specification review, use `superpowers:writing-plans` to draft the
-   plan. Use a small number of small, independently verifiable tasks. State
-   dependencies, allowed paths, expected outcomes, checks, and safe parallel
-   work. Save local plans under `docs/superpowers/plans/` with the existing
-   date-and-slug naming. Add an authorized scoped ignore rule if needed.
+2. After specification review, the assigned coder uses
+   `superpowers:writing-plans` to draft the plan. Use a small number of small,
+   independently verifiable tasks. State dependencies, allowed paths, expected
+   outcomes, checks, and safe parallel work. Save local plans under
+   `docs/superpowers/plans/` with the existing date-and-slug naming. Add an
+   authorized scoped ignore rule if needed.
    Use `git check-ignore -v -- "$plan"` and `git ls-files -- "$plan"` to confirm
    the actual plan is ignored and untracked while specifications stay visible.
    Bring conflicts with the target's tracking policy to the lead.
@@ -539,14 +604,9 @@ review the expanded specification before continuing.
    or uses separate authorized writable workspaces. Keep one editor per shared
    checkout and run the implementation [review and repair](#review-and-repair).
 
-Freeze the specification and the plan separately for independent review by
-someone who did not author the document. Use the single-editor handoff below
-for repairs. Have the author re-review the current snapshot even after a clean
-first review, then have the reviewer confirm it. Refreeze any edit and repeat
-the author and reviewer checks in that order. Advance when required checks pass
-and both confirm the same digest, with no actionable reviewer findings. Send
-changed requirements back through specification review and re-review any
-affected plan.
+Freeze the specification and the plan separately and apply
+[Review and repair](#review-and-repair) to each. Pass the specification gate
+before drafting the plan, and pass the plan gate before implementation.
 
 While writing a specification, consult Context7 for applicable platform and
 library best practices. Cite the relevant primary sources and reconcile them
@@ -565,38 +625,48 @@ authorized local work that does not depend on the other repository.
 
 ### Review and repair
 
-Assign one coder and at least one reviewer. When both CLIs are available,
-use a reviewer on a different CLI from the coder. Record each reviewer's
-address, CLI, snapshot, and whether they authored any changes. The lead
-names the task checkout and the editor for each turn. Only that editor
-changes files in the checkout, and each handoff ends the editor's turn.
+The lead assigns an author and at least two eligible nonauthor reviewers
+from the authorized roster. When both CLIs are available, at least one reviewer
+uses a different CLI from the author. Record each reviewer's address, CLI,
+candidate SHA-256, and any candidate changes they authored. If fewer than two
+eligible reviewers are available, hold the gate and request authorization for
+any additional member needed.
 
-1. The lead gives the coder the starting snapshot, task scope, constraints,
-   required checks, and reporting path. The coder implements the task, runs
-   the checks, and hands back the changed files and results.
-2. The lead freezes the candidate and hands it to the reviewer. The
-   reviewer checks the whole change and directly fixes confirmed issues
-   within the assignment in the task checkout. Before editing, compare only
-   the assigned paths in the checkout against the archive's `payload/`.
-   Verify that the paths, contents, and executable bits match and that intended
-   deletions are absent. If anything differs, stop and report it to the lead.
-   After a fix, run the relevant checks, report the input snapshot's SHA-256,
-   and hand back the checkout so the lead can freeze the output under a new
-   SHA-256.
-3. The coder re-reviews the reviewer's fixes on the new snapshot. Check
-   that each issue is resolved and that the repair introduces no regression.
-   Report any remaining or new issues to the lead so the reviewer can
-   address them on the next turn.
-4. The reviewer reviews the latest candidate again. If the reviewer makes
-   another fix, freeze the new candidate and repeat the coder re-review.
-   If there is another reviewer, give them a separate turn and send any
-   fixes they make through the same cycle.
-5. Finish when the latest candidate passes the required checks and the
-   reviewer finds no actionable in-scope issues, with coder confirmation
-   of every reviewer fix on that candidate. Clean verdicts and coder
-   confirmation must cite the latest candidate's SHA-256. Report any issue
-   that requires a decision beyond the assigned scope to the lead. For a
-   commit, also meet the [team commit checks](#commit-reviewed-changes).
+1. The author runs the assigned checks and hands back the files and results.
+   The lead freezes the candidate and gives both reviewers the same archive.
+   Each independently reviews the whole candidate in a read-only turn and
+   reports to the lead with its SHA-256 before seeing the other's findings.
+2. The lead deduplicates findings, resolves conflicts against the accepted
+   scope, and records each disposition with evidence. Return disputed
+   dispositions to their reporters for resolution. Send one editor a
+   consolidated list with a reference, evidence, expected behavior, and a
+   repair check for each accepted finding. Route requirements changes through
+   specification review and any affected plan review.
+3. Assign the original author as repair editor by default. If another editor
+   is needed, prefer someone outside the reviewer pair. Only the assigned
+   editor writes in the task checkout, and handback ends the editor's turn.
+   Before editing, verify that the assigned paths, file contents, and
+   executable bits match the frozen `payload/` and that declared deletions
+   are absent. Stop and report any mismatch to the lead. Hand back the input
+   SHA-256, repairs, and check results.
+4. The lead freezes the repaired candidate. The original author confirms the
+   repairs and checks for regressions on the new digest. Resolve issues from
+   that check with the lead before both eligible reviewers independently review
+   the new archive. Repeat for actionable in-scope findings. Reuse check
+   evidence only when the relevant inputs and execution environment still
+   match. On an unchanged digest, retain clean verdicts and obtain confirmation
+   from the reporter of any remaining disputed finding.
+
+Pass the gate when required checks pass, no actionable in-scope findings
+remain, and the author's confirmation and two eligible reviewers' independent
+clean verdicts cite the same final SHA-256. A clean first round supplies both
+verdicts when the author confirms that unchanged digest and the checks pass.
+
+If a reviewer authored any surviving change, including a deletion or an
+executable-bit change, record it and obtain an independent replacement
+whole-candidate verdict. Applying a reviewer's patch through another editor
+retains its authorship. A reviewer who reports a defect or expected behavior
+remains eligible when the editor authors the repair independently.
 
 For each handoff after edits, the lead archives the exact candidate files
 at the location agreed in [Run an assignment](#run-an-assignment).
@@ -630,10 +700,10 @@ authorizes commits and pushes separately.
 Only the designated lead creates an authorized team commit. The lead needs
 `codegpt` on `PATH`. Check the target branch and its expected tip, then stage
 only the approved changes.
-The review and repair loop can finish with one reviewer. Before committing,
-each change needs two independent reviews by reviewers who did not write
-that change. Both reviews must apply to the same final snapshot and cite
-its digest.
+Before committing, complete the [review gate](#review-and-repair) with passing
+required checks, author confirmation, and two eligible whole-candidate
+verdicts on the final archive's SHA-256. Each change needs two independent
+reviews by reviewers who did not write that change.
 
 Verify the archive digest and confirm `metadata.json`'s `base` matches the
 expected branch tip. In a temporary Git index, use `git read-tree` to load
@@ -663,17 +733,17 @@ requires its own authorization.
 ### Reports and stalled work
 
 Members report to the lead when they finish or get stuck. Every handback,
-including a coder confirmation or reviewer verdict without edits, identifies
+including an author confirmation or a read-only reviewer verdict, identifies
 the immutable inputs actually examined or used to run checks. Include the
-snapshot SHA-256, fixes or `none`, commands and recorded exit statuses, and
-any checks skipped, `not run`, or blocked. Distinguish source inspection
-from runtime checks. For runtime checks, record relevant installed tool
-versions and the execution and configuration used, such as the machine,
-profile, and digests of installed helpers or settings files. The lead
-records the result with the task and checks the final delta. Reuse accepted
-evidence when the relevant inputs still match, and attribute it to the
-member and CLI that produced it. The commit procedure still needs separate
-user authorization.
+snapshot SHA-256, findings and verdict as applicable, fixes or `none`,
+commands and recorded exit statuses, and any checks skipped, `not run`, or
+blocked. Distinguish source inspection from runtime checks. For runtime
+checks, record relevant installed tool versions and the execution and
+configuration used, such as the machine, profile, and digests of installed
+helpers or settings files. The lead records the result with the task and
+checks the final delta. Reuse accepted evidence when the relevant inputs
+still match, and attribute it to the member and CLI that produced it. The
+commit procedure still needs separate user authorization.
 
 Write the English technical report to the approved writable location when
 available. Otherwise deliver it with the same required fields through an
@@ -729,11 +799,11 @@ and update it after key decisions, checks, or handoffs. For example:
 
 ```zsh
 herdr-context record <<'EOF'
-Task and role: Review the candidate as the assigned reviewer.
-Scope and decisions: Review the assigned files and preserve user edits.
+Task and role: Review the frozen candidate as an assigned read-only reviewer.
+Scope and decisions: Inspect the whole candidate independently.
 Candidate and paths: Record the SHA-256 and the checkout and archive paths.
 Progress and checks: Record completed work, results, and remaining issues.
-Next: Compare the checkout to the archive before making repairs.
+Next: Verify the archive digest and report findings and verdict to the lead.
 EOF
 ```
 
@@ -873,14 +943,8 @@ preserve existing sessions when reporting permission or launch mismatches.
 If no roster is authorized, propose the smallest suitable set of roles and
 wait for launch authorization. Use hc run --bg for prepared shells.
 
-Before launching Codex with a profile that uses Dart/Flutter, check that
-`dart` resolves on the verified Herdr Core launch route and in the effective
-launch wrapper and profile. For a plain local Core PATH probe, use
-`hc exec -- /bin/sh -c 'command -v dart'`. For a remote launch, use
-`hc exec --on <machine>` on the same verified machine as `hc run`.
-If `dart` is missing from the launch PATH, follow Launch rules to use a
-verified login shell or explicit executable directories in the child
-environment, then repeat the check in that environment.
+Run Launch preflight for each requested profile, including the Codex Dart
+probe where applicable, and launch on the route that passes.
 
 Before resending or assigning work to a live member with null or unexpected
 status, read its screen with hc read --lines 0. Report startup trust or
