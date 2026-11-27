@@ -536,17 +536,20 @@ keep the record in the note if it fits or link to the approved handoff
 record from the note. The lead resumes from the record when a result or
 direction arrives. Wait for work with an outstanding handback.
 
-For a substantial handoff, use the location approved by the user or project.
-Otherwise, use an absolute shared path outside the checkout that every
-assigned member can read. For separate machines without a shared path, use
-a targeted transfer such as `hc put` to the verified member. Record the
-destination path and confirm the copied artifact's digest.
+The lead identifies a durable shared report location approved by the user or
+project. When the location is left open, use a durable, absolute shared path
+outside the checkout. Verify that each assigned member can write to their own
+report path and read the reports they need. For separate machines without a
+shared path, use a targeted transfer such as `hc put` to the verified member.
+Record the destination path and confirm the copied artifact's digest.
 
 Give each assignment an owner, editor or read-only designation, branch and
 checkout, baseline or candidate, allowed paths, any skills needed, checks,
-dependencies, reporting path, and stop condition. Repeat the
+dependencies, absolute report path, and stop condition. Repeat the
 [language instruction](#language). Before sending, verify the recipient's
-live address, role, parent, space, machine, and cwd against the record.
+live address, role, parent, space, machine, and cwd against the record. The
+lead checks context used in their own session and the recipient's session.
+Use the read methods under [Context checkpoints](#context-checkpoints).
 Set `member` to the verified address or required alias. Confirm the
 assignment began through a new reported working turn or the member's
 acknowledgement. For uncertain delivery, inspect the member's status and
@@ -732,10 +735,11 @@ requires its own authorization.
 
 ### Reports and stalled work
 
-Members report to the lead when they finish or get stuck. Every handback,
-including an author confirmation or a read-only reviewer verdict, identifies
-the immutable inputs actually examined or used to run checks. Include the
-snapshot SHA-256, findings and verdict as applicable, fixes or `none`,
+Members report to the lead when they finish or get stuck. Write the detailed
+technical report in English at the approved durable shared location. For each
+handback, including an author confirmation or read-only review, identify the
+immutable inputs examined or used to run checks. Include the snapshot
+SHA-256, findings and verdict as applicable, fixes or `none`,
 commands and recorded exit statuses, and any checks skipped, `not run`, or
 blocked. Distinguish source inspection from runtime checks. For runtime
 checks, record relevant installed tool versions and the execution and
@@ -745,15 +749,20 @@ checks the final delta. Reuse accepted evidence when the relevant inputs
 still match, and attribute it to the member and CLI that produced it. The
 commit procedure still needs separate user authorization.
 
-Write the English technical report to the approved writable location when
-available. Otherwise deliver it with the same required fields through an
-authorized channel, including the pane if agreed. Use Taiwan Traditional
-Chinese for the short human-facing status or file pointer. Send it to the
-verified lead or print it in the pane if that is the agreed return path.
+The member checks their own context before sending. The lead checks their
+own on receipt. Use the read methods under
+[Context checkpoints](#context-checkpoints).
+
+Send the verified lead a short `hc` handback in Taiwan Traditional Chinese
+with the outcome or verdict, absolute report path, candidate SHA-256 when
+applicable, and any decision or blocker that needs the lead. If no durable
+writable location is available, deliver the English report with the same
+required fields through an authorized channel. Print the handback or report
+in the pane when that is the agreed return path.
 
 ```zsh
 hc send -- "$lead" \
-  '快照 SHA-256 <sha256>。修正：無。Markdown 檢查通過，無待修問題。報告 /path/to/report.md。'
+  '候選 SHA-256 <sha256>。檢查通過，無待決事項。報告 /path/to/report.md。'
 ```
 
 Read the screen when status is blocked, null, or unexpected. Preserve the
@@ -801,7 +810,7 @@ and update it after key decisions, checks, or handoffs. For example:
 herdr-context record <<'EOF'
 Task and role: Review the frozen candidate as an assigned read-only reviewer.
 Scope and decisions: Inspect the whole candidate independently.
-Candidate and paths: Record the SHA-256 and the checkout and archive paths.
+Candidate and paths: Record the applicable SHA-256 and durable artifact and report paths.
 Progress and checks: Record completed work, results, and remaining issues.
 Next: Verify the archive digest and report findings and verdict to the lead.
 EOF
@@ -815,6 +824,23 @@ Git uses its canonical directory path. Git errors, including timeouts, need
 diagnosis before using the checkpoint. Notes live in a private per-user
 directory outside the checkout. [Node subprocess API](https://github.com/nodejs/node/blob/main/doc/api/child_process.md)
 
+For each context check, use a current percent-used `agent.context` from
+`hc get -- <terminal>` or a visible context footer from
+`hc read --lines 0 -- <terminal>`. If a slash command is needed, use Codex
+`/status` or Claude Code `/context` only after verifying the pane is idle or
+done, the composer is empty, and there is no dialog or draft. Convert a
+remaining percentage to percent used. Treat missing or stale readings as
+unknown when a current value cannot be read safely. Account usage and
+rate-limit quota are separate measurements.
+[OpenAI developer commands](https://learn.chatgpt.com/docs/developer-commands?surface=cli)
+[Anthropic Claude Code commands](https://code.claude.com/docs/en/commands)
+
+These context-use reminders apply to the lead and every team member. At
+60% used or above, refresh the checkpoint and report pointers. At 80% used
+or above, also look for the next safe stopping point and coordinate
+compaction using the procedure below if it would help. When the boundary is
+unsafe, wait for a safe one or report the blocker to the lead.
+
 Record, save, and load in the session's assigned checkout. If a current
 session reports a checkout mismatch, return to the checkout in the diagnostic.
 A session initialized by an older helper keeps its per-checkout lookup until
@@ -827,8 +853,9 @@ session has no note or the save fails, including when the helper is
 missing or exits with an error. A Codex hook that is untrusted or times
 out cannot protect compaction, so confirm both hooks with `/hooks`. After
 compaction, `SessionStart` prompts the agent to run `herdr-context load`
-in the same checkout. Load the saved task data and verify it against the
-latest assignment and candidate before recording a replacement note.
+in the same session and checkout. Check the restored task data against the
+latest assignment and candidate and confirm the exact next action before
+resuming and recording a replacement note.
 
 Run one interactive agent per Herdr pane. Prefix every nested Codex or Claude
 Code invocation, including noninteractive commands, with
@@ -889,6 +916,39 @@ replacement records a new note before it starts work.
 Claude Code's team template turns off automatic and idle compaction.
 Codex's model-limit compaction remains a fallback. Both hooks cover
 automatic and manual compaction when the CLI triggers them.
+
+#### Verify checkpoint recovery
+
+The lead verifies recovery with one authorized disposable interactive Herdr
+session per CLI on the team's launch route and effective checkpoint setup.
+Verify the disposable address and checkout before typing. Keep active team
+panes out of the test. Observe current-session initialization and verify both
+checkpoint hooks are active. Run `herdr-context record` from the assigned
+checkout with a unique test marker, task, and exact next action. Compact using
+the verified idle boundary above.
+
+For Codex, wait for the CLI to report compaction complete. Verify an idle or
+done pane with an empty composer and no dialog or draft, then send one
+ordinary test continuation in the same session and checkout. Omit the test
+marker, task, and exact next action from the prompt. Verify that Codex
+delivers the queued `SessionStart` load instruction on that turn. For Claude
+Code, observe the post-compaction `SessionStart` load instruction as the CLI
+delivers it. For both CLIs, verify that `herdr-context load` actually runs in
+the same session and checkout and exits 0. Compare the loaded marker, task,
+and exact next action with the recorded values and verify the pane returns
+ready.
+[Codex 0.172.0 manual compaction hook test](https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/core/tests/suite/hooks.rs#L2187-L2257)
+
+The lead keeps a durable per-CLI record of the operator, commands and exit
+statuses, observed results, CLI and Herdr versions, machine and launch
+profile or route, and installed helper and effective hook and settings
+identities or digests. A fresh team can reuse a readable passing record once
+its lead verifies that the procedure, relevant inputs, and execution
+environment still match. If the evidence is missing or the effective setup
+differs, the lead reruns the disposable check for the affected CLI and
+records a specific blocker for a failed or unavailable check. Verify the
+actual live session and its safe boundary before any compaction, including
+when using prior evidence.
 
 ### Language
 
@@ -963,6 +1023,11 @@ its role chip to the current roster role, including for the lead. Set native
 conversation titles to actual addresses. In a fresh screenshot, verify the
 header names and roles and the independently visible Pixel HQ team entries.
 Report the roster, readiness, and any blockers.
+
+Follow Context checkpoints and Reports and stalled work during setup.
+Establish the durable shared report location and verify disposable recovery
+or confirm matching passing recovery evidence. Repeat the context-check and
+handback expectations in assignments.
 
 If I supply a task, start it once its assigned members are READY. Follow
 Specify and plan work and Review and repair. For writes in another repository,
